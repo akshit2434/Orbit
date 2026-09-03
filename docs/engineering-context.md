@@ -69,6 +69,22 @@ Highest-priority areas:
 
 The product should become useful long before arbitrary desktop control is solved.
 
+## Current prototype snapshot
+
+The repository currently contains a native macOS SwiftUI prototype for Orbit's primary floating surface. It is intentionally a shell for interaction and visual validation, not the finished agent runtime.
+
+- `swift run Orbit` launches a borderless, always-on-top accessory panel.
+- The panel defaults to a small light-mode orb and does not open a conventional app window on click.
+- Clicking the orb expands a compact accent-colored glass capsule with a live microphone waveform.
+- The waveform is backed by `AVAudioEngine` input levels and is amplified at the center with softened edges.
+- Hovering the expanded surface reveals cancel and send actions.
+- Escape cancels the current listening state and Return sends it into the thinking state.
+- The orb can be dragged without triggering activation; stationary clicks activate it.
+- The panel position is persisted relative to the screen edge and restored on relaunch.
+- The prototype uses SwiftUI for rendering and AppKit `NSPanel` for accessory-window behavior and native window dragging.
+
+The visual and interaction rules for this shell are authoritative in [Orb UI Style](orb-ui-style.md). Keep provider integrations, context collection, and agent routing behind internal abstractions as those slices are added.
+
 ---
 
 # Native macOS Stack
