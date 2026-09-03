@@ -11,6 +11,9 @@ final class OrbitPanelModel: ObservableObject {
     @Published var streamText = ""
     @Published var hintText: String?
     @Published var chatOpen = false
+    @Published var historyOpen = false
+    @Published var selectedTurn: ChatTurn?
+    let store = ChatStore()
 
     let microphone = MicrophoneMonitor()
     let context: ContextService
@@ -87,14 +90,28 @@ final class OrbitPanelModel: ObservableObject {
         streamText = ""
         hintText = nil
         chatOpen = false
+        historyOpen = false
+        selectedTurn = nil
         state = .idle
         isExpanded = false
     }
 
+    func openHistory() {
+        historyOpen = true
+        chatOpen = true
+        isExpanded = false
+        selectedTurn = nil
+        state = .idle
+    }
+
     func closeChat() {
+        answerTask?.cancel()
+        answerTask = nil
         streamText = ""
         hintText = nil
         chatOpen = false
+        historyOpen = false
+        selectedTurn = nil
         state = .idle
     }
 
@@ -121,24 +138,39 @@ final class OrbitPanelModel: ObservableObject {
         state = .thinking
         isExpanded = false
         chatOpen = true
+        historyOpen = false
+        selectedTurn = nil
         answerTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.talk.answerStream(
                 transcript: text,
                 onHint: { hint in
                     Task { @MainActor [weak self] in
-                        self?.hintText = hint
+                        guard let self else { return }
+                        guard self.answerTask != nil else { return }
+                        self.hintText = hint
                     }
                 },
                 onToken: { token in
                     Task { @MainActor [weak self] in
                         guard let self else { return }
+                        guard self.answerTask != nil else { return }
                         self.hintText = nil
                         self.streamText += token
                     }
                 }
             )
+            await Task.yield()
+            await Task.yield()
             guard !Task.isCancelled else { return }
+            guard self.answerTask != nil else { return }
+            let fired = TalkController.selectTools(
+                transcript: text,
+                hasPaste: !self.context.pastedText.isEmpty,
+                clipboardAllowed: self.context.clipboardAllowed
+            )
+            let tools = fired.map(\.rawValue).sorted()
+            self.store.append(ChatTurn(transcript: text, reply: self.streamText, tools: tools))
             self.chatOpen = true
             self.state = .idle
         }

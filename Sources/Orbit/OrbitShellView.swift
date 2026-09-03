@@ -50,6 +50,7 @@ struct OrbitOverlayView: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
             ZStack(alignment: .trailing) {
+                historyButton
                 surface
                     .frame(
                         width: model.isExpanded ? 190 : 56,
@@ -60,30 +61,37 @@ struct OrbitOverlayView: View {
             if !model.isExpanded, model.chatOpen {
                 ZStack(alignment: .topTrailing) {
                     VStack(alignment: .trailing, spacing: 2) {
-                        if let hint = model.hintText, !hint.isEmpty {
-                            Text(hint)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .transition(.blurReplace.combined(with: .opacity))
-                        }
-                        if !model.streamText.isEmpty {
-                            Text(model.streamText)
-                                .font(.system(size: 10))
-                                .lineLimit(3)
-                                .truncationMode(.tail)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
-                                .frame(maxWidth: 190, alignment: .trailing)
-                                .accessibilityLabel("Orbit reply")
-                                .transition(.blurReplace.combined(with: .opacity))
+                        if model.historyOpen {
+                            historyCard
+                        } else {
+                            if let hint = model.hintText, !hint.isEmpty {
+                                Text(hint)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .transition(.blurReplace.combined(with: .opacity))
+                            }
+                            if !model.streamText.isEmpty {
+                                Text(model.streamText)
+                                    .font(.system(size: 10))
+                                    .lineLimit(3)
+                                    .truncationMode(.tail)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
+                                    .frame(maxWidth: 190, alignment: .trailing)
+                                    .accessibilityLabel("Orbit reply")
+                                    .transition(.blurReplace.combined(with: .opacity))
+                            }
+                            cardInputRow
                         }
                     }
                     .frame(maxWidth: 190, alignment: .trailing)
                     .padding(.trailing, 20)
                     .animation(.easeInOut(duration: 0.46), value: model.hintText)
                     .animation(.easeInOut(duration: 0.46), value: model.streamText)
+                    .animation(.easeInOut(duration: 0.46), value: model.historyOpen)
+                    .animation(.easeInOut(duration: 0.46), value: model.store.turns.count)
 
                     Button {
                         model.closeChat()
@@ -95,6 +103,7 @@ struct OrbitOverlayView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .focusable(false)
+                    .keyboardShortcut(.cancelAction)
                     .accessibilityLabel("Close chat")
                 }
                 .frame(maxWidth: 190, alignment: .trailing)
@@ -129,6 +138,115 @@ struct OrbitOverlayView: View {
                 }
         )
         .allowsWindowActivationEvents()
+    }
+
+    private var historyButton: some View {
+        Button {
+            model.openHistory()
+        } label: {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 10, weight: .regular))
+                .frame(width: 22, height: 22)
+                .foregroundStyle(.secondary)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(.white.opacity(0.4), lineWidth: 0.6)
+                }
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .accessibilityLabel("Show history")
+        .opacity(isHovered && !model.isExpanded ? 1 : 0)
+        .scaleEffect(isHovered && !model.isExpanded ? 1 : 0.8)
+        .offset(x: isHovered && !model.isExpanded ? -56 : 0)
+        .allowsHitTesting(isHovered && !model.isExpanded)
+        .animation(.easeOut(duration: 0.1), value: isHovered)
+        .animation(.smooth(duration: 0.22), value: model.isExpanded)
+    }
+
+    private var historyCard: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            if let selected = model.selectedTurn {
+                Button {
+                    model.selectedTurn = nil
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .focusable(false)
+                .accessibilityLabel("Back to history")
+                Text(selected.transcript)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 170, alignment: .trailing)
+                    .lineLimit(2)
+                Text(selected.reply)
+                    .font(.system(size: 10))
+                    .lineLimit(3)
+                    .truncationMode(.tail)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
+                    .frame(maxWidth: 190, alignment: .trailing)
+                    .accessibilityLabel("Past reply")
+            } else {
+                if model.store.turns.isEmpty {
+                    Text("No turns yet.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: 170, alignment: .trailing)
+                        .accessibilityLabel("Empty history")
+                } else {
+                    ForEach(Array(model.store.turns.enumerated()), id: \.offset) { _, turn in
+                        Button {
+                            model.selectedTurn = turn
+                        } label: {
+                            Text(turn.transcript)
+                                .font(.system(size: 10))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.black.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                                .frame(maxWidth: 170, alignment: .trailing)
+                        }
+                        .buttonStyle(.plain)
+                        .focusable(false)
+                        .accessibilityLabel("Reread turn")
+                    }
+                }
+            }
+            cardInputRow
+        }
+    }
+
+    private var cardInputRow: some View {
+        HStack(spacing: 6) {
+            TextField("Ask…", text: $model.debugText)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 10))
+                .onSubmit {
+                    model.send()
+                }
+                .accessibilityLabel("Ask Orbit")
+            Button {
+                model.activate()
+            } label: {
+                Image(systemName: "mic")
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .focusable(false)
+            .accessibilityLabel("Voice input")
+        }
+        .frame(maxWidth: 170, alignment: .trailing)
     }
 
     private var surface: some View {
