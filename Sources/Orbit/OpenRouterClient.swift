@@ -33,7 +33,9 @@ public struct OpenRouterClient: Sendable {
         ]
         let request = Self.buildRequest(model: config.openRouterModel, messages: messages, apiKey: key)
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200 else { return Self.stubForFailure(status: status, transcript: transcript, context: context) }
             struct ChoiceMessage: Decodable { var content: String? }
             struct Choice: Decodable { var message: ChoiceMessage? }
             struct Response: Decodable { var choices: [Choice]? }
@@ -46,6 +48,10 @@ public struct OpenRouterClient: Sendable {
         } catch {
             return Self.stub(transcript: transcript, context: context)
         }
+    }
+
+    static func stubForFailure(status: Int, transcript: String, context: ContextBundle) -> String {
+        "[openrouter \(status)] " + stub(transcript: transcript, context: context)
     }
 
     static func stub(transcript: String, context: ContextBundle) -> String {

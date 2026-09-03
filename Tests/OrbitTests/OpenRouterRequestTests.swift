@@ -27,6 +27,14 @@ final class OpenRouterRequestTests: XCTestCase {
         XCTAssertEqual(out, "Heard: hello | app: Safari | screenshot: no | paste: 2 chars.")
     }
 
+    func testFailureStubHasStatusMarker() {
+        let context = ContextBundle(app: nil, pastedText: nil, clipboard: nil, screenshotPNG: nil)
+        let out = OpenRouterClient.stubForFailure(status: 401, transcript: "hello", context: context)
+        XCTAssertTrue(out.hasPrefix("[openrouter 401] "))
+        XCTAssertTrue(out.contains("Heard: hello"))
+        XCTAssertNotEqual(out, OpenRouterClient.stub(transcript: "hello", context: context))
+    }
+
     func testCompleteStubScreenshotYes() async {
         let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))
         let context = ContextBundle(app: nil, pastedText: nil, clipboard: nil, screenshotPNG: Data([0, 1]))

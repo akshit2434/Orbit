@@ -9,12 +9,11 @@ public enum AssemblyAI {
         URL(string: "https://api.assemblyai.com/v2/transcript")!
     }
 
-    public static func buildUploadRequest(data: Data, apiKey: String) -> URLRequest {
+    public static func buildUploadRequest(data _: Data, apiKey: String) -> URLRequest {
         var r = URLRequest(url: uploadURL())
         r.httpMethod = "POST"
         r.setValue(apiKey, forHTTPHeaderField: "authorization")
         r.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        r.httpBody = data
         return r
     }
 
@@ -119,27 +118,30 @@ public final class AssemblyAISTTSession: VoiceSession {
         return decoded.id
     }
 
+    static func pollStep(statusCode: Int, data: Data) throws -> String? {
+        guard statusCode == 200 else { throw AssemblyAIError.transcriptRequestFailed }
+        guard let decoded = try? JSONDecoder().decode(TranscriptPollResponse.self, from: data) else { return nil }
+        switch decoded.status {
+        case "completed":
+            guard let text = decoded.text else { throw AssemblyAIError.decodingFailed }
+            return text
+        case "error": throw AssemblyAIError.transcriptFailed(decoded.error ?? "transcription failed")
+        default: return nil
+        }
+    }
+
     private func poll(transcriptID: String, key: String) async throws -> String {
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 1_000_000_000)
             let request = AssemblyAI.buildPollRequest(transcriptID: transcriptID, apiKey: key)
-            let (data, _): (Data, URLResponse)
+            let (data, response): (Data, URLResponse)
             do {
-                (data, _) = try await URLSession.shared.data(for: request)
+                (data, response) = try await URLSession.shared.data(for: request)
             } catch {
                 continue
             }
-            guard let decoded = try? JSONDecoder().decode(TranscriptPollResponse.self, from: data) else {
-                continue
-            }
-            switch decoded.status {
-            case "completed":
-                return decoded.text ?? ""
-            case "error":
-                throw AssemblyAIError.transcriptFailed(decoded.error ?? "transcription failed")
-            default:
-                continue
-            }
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if let text = try Self.pollStep(statusCode: status, data: data) { return text }
         }
         throw AssemblyAIError.timedOut
     }

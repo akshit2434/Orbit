@@ -83,4 +83,6 @@ The first listening interaction may prompt for microphone access. The current ve
 
 ## Next vertical slice
 
+Live microphone → `AssemblyAISTTSession.transcribeWAV` wiring is explicitly the next slice, not this merge: this merge covers the mock voice session plus the offline OpenRouter stub path only, with the real STT/LLM calls present but unwired to live mic audio. The next slice hooks captured WAV bytes to `transcribeWAV` and exercises the keyed path end to end.
+
 The next meaningful slice is richer “See”: attach real screenshot bytes via `captureScreenshot()`, add browser/active-window titles, then connected accounts and Solari execution as internal tools behind the same gating pattern.

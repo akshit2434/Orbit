@@ -139,7 +139,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         let panel = OrbitPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 80, height: 76),
+            contentRect: NSRect(x: 0, y: 0, width: 80, height: 92),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -226,7 +226,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func panelSize(expanded: Bool) -> NSSize {
-        expanded ? NSSize(width: 218, height: 76) : NSSize(width: 80, height: 76)
+        expanded ? NSSize(width: 218, height: 76) : NSSize(width: 80, height: 92)
     }
 
     private func preferredScreen() -> NSScreen? {
