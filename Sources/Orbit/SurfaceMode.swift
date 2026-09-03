@@ -69,3 +69,11 @@ enum AnchorStore {
         }
     }
 }
+
+func workedString(elapsed: TimeInterval) -> String {
+    let total = Int(elapsed)
+    if total < 60 {
+        return "Worked for \(total)s"
+    }
+    return "Worked for \(total / 60)m \(total % 60)s"
+}

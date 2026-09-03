@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum OrbitState: Equatable {
@@ -49,82 +50,59 @@ struct OrbitOverlayView: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
-            ZStack(alignment: .trailing) {
-                historyButton
-                surface
-                    .frame(
-                        width: model.isExpanded ? 190 : 56,
-                        height: model.isExpanded ? 44 : 56
-                    )
-            }
-
-            if !model.isExpanded, model.chatOpen {
-                ZStack(alignment: .topTrailing) {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        if model.historyOpen {
-                            historyCard
-                        } else {
-                            if let hint = model.hintText, !hint.isEmpty {
-                                Text(hint)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .transition(.blurReplace.combined(with: .opacity))
-                            }
-                            if !model.streamText.isEmpty {
-                                Text(model.streamText)
-                                    .font(.system(size: 10))
-                                    .lineLimit(3)
-                                    .truncationMode(.tail)
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
-                                    .frame(maxWidth: 190, alignment: .trailing)
-                                    .accessibilityLabel("Orbit reply")
-                                    .transition(.blurReplace.combined(with: .opacity))
-                            }
-                            cardInputRow
-                        }
-                    }
-                    .frame(maxWidth: 190, alignment: .trailing)
-                    .padding(.trailing, 20)
-                    .animation(.easeInOut(duration: 0.46), value: model.hintText)
-                    .animation(.easeInOut(duration: 0.46), value: model.streamText)
-                    .animation(.easeInOut(duration: 0.46), value: model.historyOpen)
-                    .animation(.easeInOut(duration: 0.46), value: model.store.turns.count)
-
-                    Button {
-                        model.closeChat()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .frame(width: 20, height: 20)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .focusable(false)
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityLabel("Close chat")
+            switch model.mode {
+            case .orb:
+                ZStack(alignment: .trailing) {
+                    historyButton
+                    surface
+                        .frame(width: 56, height: 56)
                 }
-                .frame(maxWidth: 190, alignment: .trailing)
-            }
-
-            if model.isMockVoice, model.isExpanded {
-                TextField("mock transcript", text: $model.debugText)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 11))
-                    .frame(width: 190)
-                    .onSubmit {
-                        model.send()
-                    }
-                    .accessibilityLabel("Mock transcript inject")
+                .transition(.blurReplace.combined(with: .opacity))
+            case .voice:
+                ZStack(alignment: .trailing) {
+                    historyButton
+                    surface
+                        .frame(width: 190, height: 44)
+                }
+                .transition(.blurReplace.combined(with: .opacity))
+                if model.isMockVoice {
+                    TextField("mock transcript", text: $model.debugText)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                        .frame(width: 190)
+                        .onSubmit {
+                            model.send()
+                        }
+                        .accessibilityLabel("Mock transcript inject")
+                }
+            case .thinking:
+                HStack(alignment: .center, spacing: 8) {
+                    thinkingBubble
+                    surface
+                        .frame(width: 56, height: 56)
+                }
+                .transition(.blurReplace.combined(with: .opacity))
+            case .output:
+                HStack(alignment: .center, spacing: 8) {
+                    outputBubble
+                    surface
+                        .frame(width: 56, height: 56)
+                }
+                .transition(.blurReplace.combined(with: .opacity))
+            case .card, .history:
+                cardView
+                    .transition(.blurReplace.combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .padding(.trailing, 12)
         .preferredColorScheme(.light)
         .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.46), value: model.mode)
         .animation(.easeInOut(duration: 0.46), value: model.state)
+        .animation(.easeInOut(duration: 0.46), value: model.hintText)
+        .animation(.easeInOut(duration: 0.46), value: model.streamText)
+        .animation(.easeInOut(duration: 0.46), value: model.store.turns.count)
         .simultaneousGesture(
             WindowDragGesture()
         )
@@ -138,6 +116,191 @@ struct OrbitOverlayView: View {
                 }
         )
         .allowsWindowActivationEvents()
+    }
+
+    private var thinkingBubble: some View {
+        ZStack(alignment: .topLeading) {
+            Text(model.hintText ?? "Thinking…")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(.white.opacity(0.4), lineWidth: 0.6)
+                }
+                .frame(maxWidth: 170, alignment: .leading)
+                .padding(.leading, 20)
+                .transition(.blurReplace.combined(with: .opacity))
+            Button {
+                model.closeChat()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .focusable(false)
+            .keyboardShortcut(.cancelAction)
+            .accessibilityLabel("Close chat")
+        }
+        .frame(maxWidth: 190, alignment: .trailing)
+    }
+
+    private var outputBubble: some View {
+        ZStack(alignment: .topLeading) {
+            Button {
+                model.expandToCard()
+            } label: {
+                Text(model.streamText.isEmpty ? (model.hintText ?? "Thinking…") : model.streamText)
+                    .font(.system(size: 10))
+                    .lineLimit(3)
+                    .truncationMode(.tail)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
+                    .frame(maxWidth: 170, alignment: .trailing)
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .accessibilityLabel("Expand to card")
+            .padding(.leading, 20)
+            .transition(.blurReplace.combined(with: .opacity))
+            Button {
+                model.closeChat()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .focusable(false)
+            .keyboardShortcut(.cancelAction)
+            .accessibilityLabel("Close chat")
+        }
+        .frame(maxWidth: 190, alignment: .trailing)
+    }
+
+    private var cardView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                timerLabel
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(model.streamText, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 10, weight: .regular))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .focusable(false)
+                .accessibilityLabel("Copy reply")
+                Button {
+                    model.closeChat()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .focusable(false)
+                .keyboardShortcut(.cancelAction)
+                .accessibilityLabel("Close chat")
+            }
+            ScrollView {
+                Text(model.streamText.isEmpty ? (model.hintText ?? "Thinking…") : model.streamText)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel("Orbit reply")
+            }
+            .frame(maxHeight: 140)
+            .scrollIndicators(.hidden)
+            cardInputRow
+                .frame(maxWidth: 280, alignment: .trailing)
+            if let selected = model.selectedTurn {
+                Button {
+                    model.selectedTurn = nil
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .focusable(false)
+                .accessibilityLabel("Back to history")
+                Text(selected.reply)
+                    .font(.system(size: 10))
+                    .lineLimit(3)
+                    .truncationMode(.tail)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
+                    .frame(maxWidth: 280, alignment: .leading)
+                    .accessibilityLabel("Past reply")
+            } else if !model.store.turns.isEmpty {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(model.store.turns.enumerated()), id: \.offset) { _, turn in
+                            Button {
+                                model.selectedTurn = turn
+                            } label: {
+                                Text(turn.transcript)
+                                    .font(.system(size: 10))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .foregroundStyle(.primary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(.black.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                                    .frame(maxWidth: 280, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            .focusable(false)
+                            .accessibilityLabel("Reread turn")
+                        }
+                    }
+                }
+                .frame(maxHeight: 90)
+                .scrollIndicators(.hidden)
+            }
+            HStack {
+                Spacer()
+                surface
+                    .frame(width: 56, height: 56)
+            }
+        }
+        .padding(12)
+        .frame(width: 296, alignment: .leading)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(.white.opacity(0.4), lineWidth: 0.6)
+        }
+    }
+
+    private var timerLabel: some View {
+        Group {
+            if let start = model.workStart {
+                TimelineView(.periodic(from: .now, by: 1.0)) { context in
+                    Text(workedString(elapsed: context.date.timeIntervalSince(start)))
+                }
+            } else {
+                Text(workedString(elapsed: 0))
+            }
+        }
     }
 
     private var historyButton: some View {

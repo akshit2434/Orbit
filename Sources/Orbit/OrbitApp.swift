@@ -11,6 +11,7 @@ final class OrbitPanelModel: ObservableObject {
     @Published var debugText = ""
     @Published var streamText = ""
     @Published var hintText: String?
+    @Published var workStart: Date?
     var chatOpen: Bool {
         mode == .thinking || mode == .output || mode == .card || mode == .history
     }
@@ -65,6 +66,7 @@ final class OrbitPanelModel: ObservableObject {
         resultText = nil
         state = .listening
         mode = .voice
+        workStart = nil
         microphone.start()
         voice.start()
     }
@@ -92,6 +94,7 @@ final class OrbitPanelModel: ObservableObject {
         resultText = nil
         streamText = ""
         hintText = nil
+        workStart = nil
         historyOpen = false
         selectedTurn = nil
         state = .idle
@@ -110,10 +113,15 @@ final class OrbitPanelModel: ObservableObject {
         answerTask = nil
         streamText = ""
         hintText = nil
+        workStart = nil
         mode = .orb
         historyOpen = false
         selectedTurn = nil
         state = .idle
+    }
+
+    func expandToCard() {
+        mode = .card
     }
 
     func send() {
@@ -135,6 +143,7 @@ final class OrbitPanelModel: ObservableObject {
         resultText = nil
         streamText = ""
         hintText = nil
+        workStart = nil
         state = .thinking
         mode = .thinking
         historyOpen = false
@@ -154,6 +163,9 @@ final class OrbitPanelModel: ObservableObject {
                     Task { @MainActor [weak self] in
                         guard let self else { return }
                         guard self.answerTask != nil else { return }
+                        if self.workStart == nil {
+                            self.workStart = Date()
+                        }
                         self.hintText = nil
                         self.streamText += token
                     }

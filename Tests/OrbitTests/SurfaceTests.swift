@@ -24,4 +24,8 @@ final class SurfaceTests: XCTestCase {
         AnchorStore.save(PanelAnchor(maxX: 1236, midY: 554), base: base)
         XCTAssertEqual(AnchorStore.load(base: base), PanelAnchor(maxX: 1236, midY: 554))
     }
+    func testWorkedString() {
+        XCTAssertEqual(workedString(elapsed: 3), "Worked for 3s")
+        XCTAssertEqual(workedString(elapsed: 64), "Worked for 1m 4s")
+    }
 }

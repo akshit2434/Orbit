@@ -50,4 +50,15 @@ final class ChatModelTests: XCTestCase {
         XCTAssertFalse(model.chatOpen)
         XCTAssertTrue(model.streamText.isEmpty)
     }
+    func testExpandToCardSetsCardMode() async {
+        let svc = ContextService()
+        let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))
+        let model = OrbitPanelModel(isMockVoice: true, context: svc,
+            talk: TalkSession(context: svc, client: client), voice: MockVoiceSession())
+        model.submit(transcript: "ping")
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(model.mode, .output)
+        model.expandToCard()
+        XCTAssertEqual(model.mode, .card)
+    }
 }
