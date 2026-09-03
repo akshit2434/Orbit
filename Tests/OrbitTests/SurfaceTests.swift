@@ -144,6 +144,12 @@ final class SurfaceTests: XCTestCase {
         XCTAssertEqual(v.dx, 1000, accuracy: 1)
         XCTAssertEqual(flingVelocity([]).dx, 0)
     }
+    func testBoundedThrowPreservesSmallVelocityAndCapsLargeVelocity() {
+        let small = boundedThrow(CGVector(dx: 500, dy: 0))
+        XCTAssertEqual(small.dx, 80, accuracy: 0.01)
+        let large = boundedThrow(CGVector(dx: 3000, dy: 4000))
+        XCTAssertEqual(hypot(large.dx, large.dy), 180, accuracy: 0.01)
+    }
     func testHysteresisDampsNearEdge() {
         let d = hysteresisDamped(delta: CGVector(dx: 10, dy: 0), distanceToEdge: 10)
         XCTAssertEqual(d.dx, 3.5, accuracy: 0.01)
@@ -215,6 +221,6 @@ final class SurfaceTests: XCTestCase {
         model.endDrag(velocity: CGVector(dx: 1000, dy: 0))
         XCTAssertEqual(snaps, 1)
         XCTAssertEqual(moves.count, 1)
-        XCTAssertEqual(moves[0].width, 180, accuracy: 0.01)
+        XCTAssertEqual(moves[0].width, 160, accuracy: 0.01)
     }
 }

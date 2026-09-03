@@ -204,6 +204,18 @@ func flingVelocity(_ samples: [DragSample]) -> CGVector {
         dy: (last.point.y - first.point.y) / dt)
 }
 
+/// Keeps a release projection energetic without allowing one noisy pointer
+/// sample to teleport the panel across a display.
+func boundedThrow(_ velocity: CGVector, horizon: Double = 0.16, maximum: Double = 180) -> CGVector {
+    var projected = CGVector(dx: velocity.dx * horizon, dy: velocity.dy * horizon)
+    let length = hypot(projected.dx, projected.dy)
+    guard length > maximum, length > 0 else { return projected }
+    let scale = maximum / length
+    projected.dx *= scale
+    projected.dy *= scale
+    return projected
+}
+
 /// Edge hysteresis: ×0.35 when within 24pt of the edge, else unchanged.
 func hysteresisDamped(delta: CGVector, distanceToEdge: Double) -> CGVector {
     guard distanceToEdge < 24 else { return delta }

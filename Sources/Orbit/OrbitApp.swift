@@ -106,7 +106,8 @@ final class OrbitPanelModel: ObservableObject {
         lastDragTranslation = nil
         let v: CGVector = velocity == .zero ? flingVelocity(dragSamples) : velocity
         if v != .zero {
-            movePanelBy?(CGSize(width: v.dx * 0.18, height: v.dy * 0.18))
+            let projected = boundedThrow(v)
+            movePanelBy?(CGSize(width: projected.dx, height: projected.dy))
         }
         dragSamples.removeAll(keepingCapacity: true)
         // Persist happens only in snapPanelToEdge's completion handler (post-snap
@@ -249,7 +250,7 @@ final class OrbitPanelModel: ObservableObject {
 
 private final class OrbitPanel: NSPanel {
     override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
+    override var canBecomeMain: Bool { false }
 }
 
 @MainActor
@@ -281,8 +282,12 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = false
         panel.isMovableByWindowBackground = false
+        panel.isMovable = false
+        panel.isFloatingPanel = true
         panel.animationBehavior = .none
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        panel.collectionBehavior = [
+            .canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle
+        ]
         panel.contentView = NSHostingView(rootView: OrbitOverlayView(model: model))
 
         self.panel = panel
@@ -434,9 +439,9 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
         let target = snapTarget(current: panel.frame, screen: screenFrame)
         let targetFrame = NSRect(origin: target, size: panel.frame.size)
-        // Magnetic snap: ease-out cubic approx of a spring (damping ~0.8,
-        // duration 0.35s). Note: AppKit NSAnimationContext has no damping
-        // parameter — this is not a true CASpring.
+        // A single continuous release trajectory. The throw projection has
+        // already moved the target selection; this animation supplies the
+        // magnetic settle without handing the window to macOS window dragging.
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.35
             ctx.timingFunction = CAMediaTimingFunction(
