@@ -25,6 +25,7 @@ let package = Package(
                     "-Xlinker", infoPlistPath
                 ])
             ]
-        )
+        ),
+        .testTarget(name: "OrbitTests", dependencies: ["Orbit"]),
     ]
 )
