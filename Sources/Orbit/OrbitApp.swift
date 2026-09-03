@@ -90,6 +90,7 @@ final class OrbitPanelModel: ObservableObject {
         voice.stop()
         let pending = debugText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !pending.isEmpty else {
+            resultText = nil
             state = .idle
             isExpanded = false
             return
@@ -104,6 +105,7 @@ final class OrbitPanelModel: ObservableObject {
         answerTask?.cancel()
         microphone.stop()
         voice.stop()
+        resultText = nil
         state = .thinking
         isExpanded = false
         answerTask = Task { @MainActor [weak self] in
