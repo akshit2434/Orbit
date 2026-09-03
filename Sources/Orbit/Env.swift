@@ -1,6 +1,6 @@
 import Foundation
 
-public struct OrbitConfig: Equatable {
+public struct OrbitConfig: Equatable, Sendable {
     public var assemblyAIKey: String?
     public var openRouterKey: String?
     public var openRouterModel: String

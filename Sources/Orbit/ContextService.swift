@@ -2,13 +2,13 @@ import AppKit
 import Foundation
 import ScreenCaptureKit
 
-public enum ContextTool: String, CaseIterable, Hashable { case screenshot, activeAppWindow, pastedText, clipboard }
+public enum ContextTool: String, CaseIterable, Hashable, Sendable { case screenshot, activeAppWindow, pastedText, clipboard }
 
-public struct ActiveAppInfo: Equatable {
+public struct ActiveAppInfo: Equatable, Sendable {
     public var appName: String; public var bundleID: String?; public var windowTitle: String?
 }
 
-public struct ContextBundle: Equatable {
+public struct ContextBundle: Equatable, Sendable {
     public var app: ActiveAppInfo?; public var pastedText: String?; public var clipboard: String?; public var screenshotPNG: Data?; public var notes: [String] = []
 }
 
