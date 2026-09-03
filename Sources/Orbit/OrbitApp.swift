@@ -287,6 +287,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         pendingCollapse?.cancel()
 
         let size = surfaceSize(mode)
+        NSLog("orbit: mode=%@", String(describing: mode))
         let screenFrame =
             panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
         let side = expansionSide(
