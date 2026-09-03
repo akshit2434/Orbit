@@ -30,7 +30,7 @@
 
 ---
 
-### Task B1: Session turn store
+### Task 1: Session turn store
 
 **Files:**
 - Create: `Sources/Orbit/ChatStore.swift`
@@ -118,7 +118,7 @@ git commit -m "feat(history): add session turn store with documented cap"
 
 ---
 
-### Task B2: History button + popout UI
+### Task 2: History button + popout UI
 
 **Files:**
 - Modify: `Sources/Orbit/OrbitApp.swift` (model only)
@@ -167,7 +167,7 @@ git commit -m "feat(history): add hover button and popout chat with store"
 
 ---
 
-### Task B3: Live E2E (up to ~10 convos) + docs
+### Task 3: Live E2E (up to ~10 convos) + docs
 
 **Files:**
 - Modify: `README.md`, `docs/prototype-context.md`

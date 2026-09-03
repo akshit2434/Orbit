@@ -31,7 +31,7 @@
 
 ---
 
-### Task A1: Token streamer (SSE + stub)
+### Task 1: Token streamer (SSE + stub)
 
 **Files:**
 - Create: `Sources/Orbit/StreamingClient.swift`
@@ -151,7 +151,7 @@ git commit -m "feat(streaming): add token streamer with SSE parse and stub"
 
 ---
 
-### Task A2: Hints + streaming orchestration with memory
+### Task 2: Hints + streaming orchestration with memory
 
 **Files:**
 - Modify: `Sources/Orbit/TalkController.swift`
@@ -276,7 +276,7 @@ git commit -m "feat(streaming): add hints and streaming orchestration with memor
 
 ---
 
-### Task A3: Shell wiring — Enter fix, streaming view, close
+### Task 3: Shell wiring — Enter fix, streaming view, close
 
 **Files:**
 - Modify: `Sources/Orbit/OrbitApp.swift` (model only)
