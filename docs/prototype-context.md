@@ -63,7 +63,11 @@ Launched with `--mock-voice`, the model uses `MockVoiceSession` and shows a text
 
 ### Input precedence
 
-Pointer movement takes precedence over activation. A small drag threshold prevents a native window drag from being interpreted as a click. The orb and action buttons opt out of macOS focus effects so keyboard shortcuts do not add a blue focus ring to the visual surface.
+Pointer movement takes precedence over activation. A small drag threshold prevents a drag from being interpreted as a click. Only the orb/voice surface owns the drag gesture, so selecting text and operating card controls cannot move the panel. The panel is key-capable but neither main-window-capable nor natively movable; all motion is applied explicitly, which keeps macOS window tiling out of the interaction. Near-edge motion has directional resistance only while pushing into the edge, while pulling away remains direct. Release projection is bounded before the magnetic settle. The orb and action buttons opt out of macOS focus effects so keyboard shortcuts do not add a blue focus ring.
+
+### Dialogue surfaces
+
+Thinking and output bubbles sit 4 pt from the orb. Non-orb dialogue surfaces are opaque white with dark text, a subtle border, and soft shadow; close controls are white crosses on black circles. Expanding a completed output opens the same conversation: the current user prompt and assistant reply are pinned as a complete turn, earlier turns are available below as prompt/reply pairs, and the fresh composer remains visually separate. The orb and voice capsule retain the translucent glass treatment.
 
 ## State and service boundaries
 
@@ -89,7 +93,7 @@ swift run Orbit
 swift run Orbit -- --mock-voice   # text inject, no mic or keys needed
 ```
 
-The first listening interaction may prompt for microphone access. The current verification baseline is a successful `swift build`, 49/49 `swift test`, a clean `git diff --check`, `.env.local` untracked, plus the Task 3 live E2E matrix (streaming multi-token replies, history memory probes, screen/app tools with hint, clipboard-denied no-leak, denied-screen graceful completion, empty-Enter stays open, long-reply completion, store-level reread; mic round-trip headed-only) with stub-mode parity via the nil-key tests. Full GUI manual checklist with `--mock-voice` remains owed in a headed session (Task 7 recorded it N/A-headless with build/test evidence).
+The first listening interaction may prompt for microphone access. The current verification baseline is a successful `swift build`, the full `swift test` suite, a clean `git diff --check`, `.env.local` untracked, plus the Task 3 live E2E matrix (streaming multi-token replies, history memory probes, screen/app tools with hint, clipboard-denied no-leak, denied-screen graceful completion, empty-Enter stays open, long-reply completion, store-level reread; mic round-trip headed-only) with stub-mode parity via the nil-key tests. Full GUI manual checklist with `--mock-voice` remains owed in a headed session because accessory-only panels are not exposed to the current UI automation inventory.
 
 ## Next vertical slice
 

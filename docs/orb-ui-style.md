@@ -51,7 +51,9 @@ One `SurfaceMode` drives view, panel size, and placement. Panel sizes (points):
 
 ## Drag feel (magnetic, springy)
 
-- The orb travels freely while dragged (single low-threshold gesture, never activates on drag) and on release glides to the nearest screen edge with a 12 pt margin via a ~0.35 s ease-out animation, then sticks there — never free-floating mid-screen at rest.
+- Dragging is owned by the orb/voice surface, not attached dialogue or card content. The panel follows pointer deltas directly except for directional resistance within 24 pt of the nearest edge; pulling away remains 1:1.
+- Release velocity projects for 0.16 s and is capped to 180 pt before the surface glides to the nearest screen edge with a 12 pt margin via a ~0.35 s ease-out animation, then sticks there — never free-floating mid-screen at rest.
+- The `NSPanel` is key-capable for text input but cannot become the main window and is not natively movable. Orbit alone moves it with `setFrame`, preventing macOS edge tiling/split-screen from taking over.
 - The anchor persists only after the snap completes, so a quit mid-animation never keeps a stale pre-snap position.
 - Native window bounds expand before the visual surface appears and collapse ~0.24 s after it, preventing clipping.
 
@@ -67,6 +69,9 @@ One `SurfaceMode` drives view, panel size, and placement. Panel sizes (points):
 - Copy button writes the reply to `NSPasteboard` and does nothing when the reply is empty (never clears the pasteboard for nothing).
 - Text `Ask…` field plus mic button send through the same streaming pipeline; empty Enter never collapses anything.
 - Close cross plus Escape return to the orb; closing mid-stream cancels and drops late tokens.
+- Thinking, output, card, input, and history surfaces are opaque white with dark text, a hairline dark border, and a soft shadow. Translucent glass is reserved for the orb/voice surface.
+- Close controls use a black circular background with a white cross and remain inside or intentionally overlap their owning surface.
+- Expanding a completed output shows the current user prompt and assistant response as one dialogue turn. Earlier turns remain available below as complete prompt/response pairs; the composer is visually separate.
 - Capsule copy-free rule stands; all words live in the bubble/card.
 
 ## Product behavior
