@@ -28,4 +28,10 @@ final class SurfaceTests: XCTestCase {
         XCTAssertEqual(workedString(elapsed: 3), "Worked for 3s")
         XCTAssertEqual(workedString(elapsed: 64), "Worked for 1m 4s")
     }
+    func testSnapTargetsNearestEdge() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let near = NSRect(x: 900, y: 400, width: 80, height: 92)
+        let p = snapTarget(current: near, screen: screen)
+        XCTAssertEqual(p.x, 1000 - 80 - 12, accuracy: 0.5)
+    }
 }

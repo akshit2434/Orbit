@@ -23,6 +23,9 @@ final class OrbitPanelModel: ObservableObject {
     let context: ContextService
     let isMockVoice: Bool
     var persistPosition: (() -> Void)?
+    var movePanelBy: ((CGSize) -> Void)?
+    var snapPanel: (() -> Void)?
+    private var lastDragTranslation: CGSize?
     private let talk: TalkSession
     private var voice: any VoiceSession
     private var answerTask: Task<Void, Never>?
@@ -71,12 +74,19 @@ final class OrbitPanelModel: ObservableObject {
         voice.start()
     }
 
-    func beganDragging() {
+    func drag(to translation: CGSize) {
         dragResetWorkItem?.cancel()
         isDragging = true
+        let last = lastDragTranslation ?? .zero
+        let delta = CGSize(
+            width: translation.width - last.width, height: translation.height - last.height)
+        lastDragTranslation = translation
+        movePanelBy?(delta)
     }
 
-    func endedDragging() {
+    func endDrag() {
+        lastDragTranslation = nil
+        snapPanel?()
         persistPosition?()
 
         let reset = DispatchWorkItem { [weak self] in
@@ -230,6 +240,12 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         model.persistPosition = { [weak self] in
             self?.persistPanelAnchor()
         }
+        model.movePanelBy = { [weak self] delta in
+            self?.movePanel(by: delta)
+        }
+        model.snapPanel = { [weak self] in
+            self?.snapPanelToEdge()
+        }
 
         model.$mode
             .removeDuplicates()
@@ -278,14 +294,12 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
 
         let size = surfaceSize(mode)
         NSLog("orbit: resize mode=\(mode) expanded=\(model.isExpanded) chatOpen=\(model.chatOpen) new=\(size) was=\(panel.frame)")
-        let maxX = panel.frame.maxX
-        let midY = panel.frame.midY
-        let frame = NSRect(
-            x: maxX - size.width,
-            y: midY - size.height / 2,
-            width: size.width,
-            height: size.height
-        )
+        let screenFrame =
+            panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
+        let side = expansionSide(
+            anchorX: panel.frame.maxX, anchorY: panel.frame.midY, screen: screenFrame)
+        let origin = resizeOrigin(current: panel.frame, newSize: size, side: side)
+        let frame = NSRect(origin: origin, size: size)
 
         if mode != .orb {
             panel.setFrame(frame, display: true)
@@ -305,6 +319,24 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func savedOrigin(for size: NSSize) -> NSPoint? {
+        if let fileAnchor = AnchorStore.load() {
+            let screenFrame =
+                preferredScreen()?.visibleFrame ?? NSScreen.main?.visibleFrame
+            if let screenFrame {
+                let side = expansionSide(
+                    anchorX: fileAnchor.maxX, anchorY: fileAnchor.midY, screen: screenFrame)
+                let origin = placementOrigin(anchor: fileAnchor, size: size, side: side)
+                let frame = NSRect(origin: origin, size: size)
+                if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) {
+                    return origin
+                }
+            } else {
+                let origin = NSPoint(
+                    x: fileAnchor.maxX - size.width, y: fileAnchor.midY - size.height / 2)
+                return origin
+            }
+        }
+
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: PositionKey.anchorX) != nil,
               defaults.object(forKey: PositionKey.centerY) != nil else {
@@ -323,11 +355,40 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         return origin
     }
 
+    private func movePanel(by delta: CGSize) {
+        guard let panel else { return }
+        var frame = panel.frame
+        frame.origin.x += delta.width
+        frame.origin.y -= delta.height
+        panel.setFrame(frame, display: true)
+    }
+
+    private func snapPanelToEdge() {
+        guard let panel else { return }
+        let screenFrame =
+            panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
+        let target = snapTarget(current: panel.frame, screen: screenFrame)
+        let targetFrame = NSRect(origin: target, size: panel.frame.size)
+        // Magnetic snap: spring damping 0.8, duration 0.35s
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.35
+            ctx.timingFunction = CAMediaTimingFunction(
+                controlPoints: 0.2, 0.9, 0.25, 1.0)
+            ctx.allowsImplicitAnimation = true
+            panel.animator().setFrame(targetFrame, display: true)
+        } completionHandler: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.persistPanelAnchor()
+            }
+        }
+    }
+
     private func persistPanelAnchor() {
         guard let panel else { return }
 
         UserDefaults.standard.set(panel.frame.maxX, forKey: PositionKey.anchorX)
         UserDefaults.standard.set(panel.frame.midY, forKey: PositionKey.centerY)
+        AnchorStore.save(PanelAnchor(maxX: panel.frame.maxX, midY: panel.frame.midY))
     }
 }
 

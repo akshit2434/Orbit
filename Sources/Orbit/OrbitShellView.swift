@@ -104,15 +104,12 @@ struct OrbitOverlayView: View {
         .animation(.easeInOut(duration: 0.46), value: model.streamText)
         .animation(.easeInOut(duration: 0.46), value: model.store.turns.count)
         .simultaneousGesture(
-            WindowDragGesture()
-        )
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 4)
-                .onChanged { _ in
-                    model.beganDragging()
+            DragGesture(minimumDistance: 2)
+                .onChanged { value in
+                    model.drag(to: value.translation)
                 }
                 .onEnded { _ in
-                    model.endedDragging()
+                    model.endDrag()
                 }
         )
         .allowsWindowActivationEvents()
