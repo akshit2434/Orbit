@@ -281,6 +281,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         pendingCollapse?.cancel()
 
         let size = panelSize(expanded: expanded, chatOpen: chatOpen)
+        NSLog("orbit: resize expanded=\(expanded) chatOpen=\(chatOpen) new=\(size) was=\(panel.frame)")
         let maxX = panel.frame.maxX
         let midY = panel.frame.midY
         let frame = NSRect(
