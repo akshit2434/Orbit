@@ -34,4 +34,42 @@ final class SurfaceTests: XCTestCase {
         let p = snapTarget(current: near, screen: screen)
         XCTAssertEqual(p.x, 1000 - 80 - 12, accuracy: 0.5)
     }
+    @MainActor
+    func testEndDragDefersPersistToSnapCompletion() {
+        let svc = ContextService()
+        let client = OpenRouterClient(
+            config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))
+        let model = OrbitPanelModel(
+            isMockVoice: true, context: svc,
+            talk: TalkSession(context: svc, client: client), voice: MockVoiceSession())
+        var snapCount = 0
+        var persistCount = 0
+        model.snapPanel = { snapCount += 1 }
+        model.persistPosition = { persistCount += 1 }
+        model.drag(to: CGSize(width: 10, height: 5))
+        model.endDrag()
+        XCTAssertEqual(snapCount, 1)
+        XCTAssertEqual(
+            persistCount, 0,
+            "endDrag must not persist pre-snap frame; persist belongs in snap completion")
+    }
+    func testPlacementAboveBelowClampsXToScreen() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let anchor = PanelAnchor(maxX: 92, midY: 400)
+        let size = NSSize(width: 320, height: 400)
+        for side: ExpansionSide in [.above, .below, .left] {
+            let p = placementOrigin(anchor: anchor, size: size, side: side, screen: screen)
+            XCTAssertEqual(p.x, 12, accuracy: 0.5, "side \(side) must clamp x on-screen")
+        }
+    }
+    func testResizeAboveBelowClampsXToScreen() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let current = NSRect(x: 12, y: 400, width: 80, height: 92)
+        let newSize = NSSize(width: 320, height: 400)
+        for side: ExpansionSide in [.above, .below] {
+            let p = resizeOrigin(current: current, newSize: newSize, side: side, screen: screen)
+            XCTAssertEqual(p.x, 12, accuracy: 0.5, "side \(side) must clamp x on-screen")
+            XCTAssertLessThanOrEqual(p.x + newSize.width, screen.maxX - 12 + 0.5)
+        }
+    }
 }

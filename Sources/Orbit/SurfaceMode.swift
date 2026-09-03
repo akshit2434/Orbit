@@ -71,34 +71,52 @@ func snapTarget(current: NSRect, screen: CGRect) -> NSPoint {
     return origin
 }
 
-func placementOrigin(anchor: PanelAnchor, size: NSSize, side: ExpansionSide) -> NSPoint {
-    let orb = surfaceSize(.orb)
-    switch side {
-    case .left:
-        return NSPoint(x: anchor.maxX - size.width, y: anchor.midY - size.height / 2)
-    case .right:
-        let orbLeft = anchor.maxX - orb.width
-        return NSPoint(x: orbLeft, y: anchor.midY - size.height / 2)
-    case .above:
-        let orbBottom = anchor.midY - orb.height / 2
-        return NSPoint(x: anchor.maxX - size.width, y: orbBottom)
-    case .below:
-        let orbTop = anchor.midY + orb.height / 2
-        return NSPoint(x: anchor.maxX - size.width, y: orbTop - size.height)
-    }
+private func clampedX(_ x: CGFloat, sizeWidth: CGFloat, screen: CGRect) -> CGFloat {
+    let margin: CGFloat = 12
+    let minX = screen.minX + margin
+    let maxX = screen.maxX - sizeWidth - margin
+    return min(max(x, minX), max(minX, maxX))
 }
 
-func resizeOrigin(current: NSRect, newSize: NSSize, side: ExpansionSide) -> NSPoint {
+func placementOrigin(
+    anchor: PanelAnchor, size: NSSize, side: ExpansionSide, screen: CGRect? = nil
+) -> NSPoint {
+    let orb = surfaceSize(.orb)
+    let origin: NSPoint
     switch side {
     case .left:
-        return NSPoint(x: current.maxX - newSize.width, y: current.midY - newSize.height / 2)
+        origin = NSPoint(x: anchor.maxX - size.width, y: anchor.midY - size.height / 2)
     case .right:
-        return NSPoint(x: current.minX, y: current.midY - newSize.height / 2)
+        let orbLeft = anchor.maxX - orb.width
+        origin = NSPoint(x: orbLeft, y: anchor.midY - size.height / 2)
     case .above:
-        return NSPoint(x: current.maxX - newSize.width, y: current.minY)
+        let orbBottom = anchor.midY - orb.height / 2
+        origin = NSPoint(x: anchor.maxX - size.width, y: orbBottom)
     case .below:
-        return NSPoint(x: current.maxX - newSize.width, y: current.maxY - newSize.height)
+        let orbTop = anchor.midY + orb.height / 2
+        origin = NSPoint(x: anchor.maxX - size.width, y: orbTop - size.height)
     }
+    guard let screen else { return origin }
+    return NSPoint(x: clampedX(origin.x, sizeWidth: size.width, screen: screen), y: origin.y)
+}
+
+func resizeOrigin(
+    current: NSRect, newSize: NSSize, side: ExpansionSide, screen: CGRect? = nil
+) -> NSPoint {
+    let origin: NSPoint
+    switch side {
+    case .left:
+        origin = NSPoint(x: current.maxX - newSize.width, y: current.midY - newSize.height / 2)
+    case .right:
+        origin = NSPoint(x: current.minX, y: current.midY - newSize.height / 2)
+    case .above:
+        origin = NSPoint(x: current.maxX - newSize.width, y: current.minY)
+    case .below:
+        origin = NSPoint(x: current.maxX - newSize.width, y: current.maxY - newSize.height)
+    }
+    guard let screen else { return origin }
+    return NSPoint(
+        x: clampedX(origin.x, sizeWidth: newSize.width, screen: screen), y: origin.y)
 }
 
 struct PanelAnchor: Codable, Equatable {

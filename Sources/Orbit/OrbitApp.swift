@@ -86,8 +86,10 @@ final class OrbitPanelModel: ObservableObject {
 
     func endDrag() {
         lastDragTranslation = nil
+        // Persist happens only in snapPanelToEdge's completion handler (post-snap
+        // frame); persisting here would write the pre-snap frame and a quit
+        // during the 0.35s animation would keep the stale position.
         snapPanel?()
-        persistPosition?()
 
         let reset = DispatchWorkItem { [weak self] in
             self?.isDragging = false
@@ -298,7 +300,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
         let side = expansionSide(
             anchorX: panel.frame.maxX, anchorY: panel.frame.midY, screen: screenFrame)
-        let origin = resizeOrigin(current: panel.frame, newSize: size, side: side)
+        let origin = resizeOrigin(current: panel.frame, newSize: size, side: side, screen: screenFrame)
         let frame = NSRect(origin: origin, size: size)
 
         if mode != .orb {
@@ -325,7 +327,8 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             if let screenFrame {
                 let side = expansionSide(
                     anchorX: fileAnchor.maxX, anchorY: fileAnchor.midY, screen: screenFrame)
-                let origin = placementOrigin(anchor: fileAnchor, size: size, side: side)
+                let origin = placementOrigin(
+                    anchor: fileAnchor, size: size, side: side, screen: screenFrame)
                 let frame = NSRect(origin: origin, size: size)
                 if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) {
                     return origin
@@ -369,7 +372,9 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
         let target = snapTarget(current: panel.frame, screen: screenFrame)
         let targetFrame = NSRect(origin: target, size: panel.frame.size)
-        // Magnetic snap: spring damping 0.8, duration 0.35s
+        // Magnetic snap: ease-out cubic approx of a spring (damping ~0.8,
+        // duration 0.35s). Note: AppKit NSAnimationContext has no damping
+        // parameter — this is not a true CASpring.
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.35
             ctx.timingFunction = CAMediaTimingFunction(
