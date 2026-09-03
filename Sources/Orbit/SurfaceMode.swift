@@ -210,6 +210,27 @@ func hysteresisDamped(delta: CGVector, distanceToEdge: Double) -> CGVector {
     return CGVector(dx: delta.dx * 0.35, dy: delta.dy * 0.35)
 }
 
+/// Directional edge hysteresis: ×0.35 only when within 24pt of the nearest
+/// edge AND moving toward it, else unchanged.
+///
+/// Sign convention: delta is gesture-space (SwiftUI DragGesture: +width =
+/// right, +height = down). movePanel(by:) applies origin.x += dx,
+/// origin.y -= dy (AppKit origin bottom-left), so +height moves toward the
+/// bottom edge and -height toward the top. Verified against movePanel(by:).
+func hysteresisDamped(
+    delta: CGVector, left: Double, right: Double, bottom: Double, top: Double
+) -> CGVector {
+    let nearest = min(left, right, bottom, top)
+    guard nearest < 24 else { return delta }
+    let towardNearest =
+        (left == nearest && delta.dx < 0)
+        || (right == nearest && delta.dx > 0)
+        || (bottom == nearest && delta.dy > 0)
+        || (top == nearest && delta.dy < 0)
+    guard towardNearest else { return delta }
+    return CGVector(dx: delta.dx * 0.35, dy: delta.dy * 0.35)
+}
+
 /// Tiling defense: keep the frame ≥2pt inside the visible frame.
 func clampedDragFrame(_ frame: NSRect, screen: CGRect) -> NSRect {
     let inset: CGFloat = 2

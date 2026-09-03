@@ -413,14 +413,14 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         guard let panel else { return }
         let screenFrame =
             panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
-        let distanceToEdge = min(
-            panel.frame.minX - screenFrame.minX,
-            screenFrame.maxX - panel.frame.maxX,
-            panel.frame.minY - screenFrame.minY,
-            screenFrame.maxY - panel.frame.maxY)
+        let left = panel.frame.minX - screenFrame.minX
+        let right = screenFrame.maxX - panel.frame.maxX
+        let bottom = panel.frame.minY - screenFrame.minY
+        let top = screenFrame.maxY - panel.frame.maxY
         let damped = hysteresisDamped(
             delta: CGVector(dx: delta.width, dy: delta.height),
-            distanceToEdge: Double(distanceToEdge))
+            left: Double(left), right: Double(right), bottom: Double(bottom),
+            top: Double(top))
         var frame = panel.frame
         frame.origin.x += damped.dx
         frame.origin.y -= damped.dy

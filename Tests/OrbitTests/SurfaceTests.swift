@@ -150,6 +150,47 @@ final class SurfaceTests: XCTestCase {
         let far = hysteresisDamped(delta: CGVector(dx: 10, dy: 0), distanceToEdge: 200)
         XCTAssertEqual(far.dx, 10, accuracy: 0.01)
     }
+    func testHysteresisDampsOnlyTowardNearestEdge() {
+        // Nearest = left (10pt): toward (dx<0) damps, away bypasses.
+        let towardLeft = hysteresisDamped(
+            delta: CGVector(dx: -10, dy: 0),
+            left: 10, right: 500, bottom: 500, top: 500)
+        XCTAssertEqual(towardLeft.dx, -3.5, accuracy: 0.01)
+        let awayLeft = hysteresisDamped(
+            delta: CGVector(dx: 10, dy: 0),
+            left: 10, right: 500, bottom: 500, top: 500)
+        XCTAssertEqual(awayLeft.dx, 10, accuracy: 0.01)
+        // Nearest = right: toward (dx>0) damps.
+        let towardRight = hysteresisDamped(
+            delta: CGVector(dx: 10, dy: 0),
+            left: 500, right: 10, bottom: 500, top: 500)
+        XCTAssertEqual(towardRight.dx, 3.5, accuracy: 0.01)
+        // Nearest = bottom: gesture-space +dy moves down (origin.y -= dy).
+        let towardBottom = hysteresisDamped(
+            delta: CGVector(dx: 0, dy: 10),
+            left: 500, right: 500, bottom: 10, top: 500)
+        XCTAssertEqual(towardBottom.dy, 3.5, accuracy: 0.01)
+        let awayBottom = hysteresisDamped(
+            delta: CGVector(dx: 0, dy: -10),
+            left: 500, right: 500, bottom: 10, top: 500)
+        XCTAssertEqual(awayBottom.dy, -10, accuracy: 0.01)
+        // Nearest = top: gesture-space -dy moves up.
+        let towardTop = hysteresisDamped(
+            delta: CGVector(dx: 0, dy: -10),
+            left: 500, right: 500, bottom: 500, top: 10)
+        XCTAssertEqual(towardTop.dy, -3.5, accuracy: 0.01)
+        // Along-edge bypass: nearest left but purely vertical motion.
+        let along = hysteresisDamped(
+            delta: CGVector(dx: 0, dy: 10),
+            left: 10, right: 500, bottom: 500, top: 500)
+        XCTAssertEqual(along.dy, 10, accuracy: 0.01)
+        XCTAssertEqual(along.dx, 0, accuracy: 0.01)
+        // Far from all edges: no damping even when moving toward nearest.
+        let far = hysteresisDamped(
+            delta: CGVector(dx: -10, dy: 0),
+            left: 200, right: 500, bottom: 500, top: 500)
+        XCTAssertEqual(far.dx, -10, accuracy: 0.01)
+    }
     func testClampedDragFrameKeepsTwoPtInside() {
         let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
         let off = clampedDragFrame(NSRect(x: -50, y: -50, width: 80, height: 92), screen: screen)
