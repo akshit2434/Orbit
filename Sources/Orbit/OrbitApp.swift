@@ -5,12 +5,15 @@ import SwiftUI
 @MainActor
 final class OrbitPanelModel: ObservableObject {
     @Published var state: OrbitState = .idle
-    @Published var isExpanded = false
+    @Published var mode: SurfaceMode = .orb
+    var isExpanded: Bool { mode == .voice }
     @Published var resultText: String?
     @Published var debugText = ""
     @Published var streamText = ""
     @Published var hintText: String?
-    @Published var chatOpen = false
+    var chatOpen: Bool {
+        mode == .thinking || mode == .output || mode == .card || mode == .history
+    }
     @Published var historyOpen = false
     @Published var selectedTurn: ChatTurn?
     let store = ChatStore()
@@ -61,7 +64,7 @@ final class OrbitPanelModel: ObservableObject {
         answerTask = nil
         resultText = nil
         state = .listening
-        isExpanded = true
+        mode = .voice
         microphone.start()
         voice.start()
     }
@@ -89,17 +92,15 @@ final class OrbitPanelModel: ObservableObject {
         resultText = nil
         streamText = ""
         hintText = nil
-        chatOpen = false
         historyOpen = false
         selectedTurn = nil
         state = .idle
-        isExpanded = false
+        mode = .orb
     }
 
     func openHistory() {
         historyOpen = true
-        chatOpen = true
-        isExpanded = false
+        mode = .history
         selectedTurn = nil
         state = .idle
     }
@@ -109,7 +110,7 @@ final class OrbitPanelModel: ObservableObject {
         answerTask = nil
         streamText = ""
         hintText = nil
-        chatOpen = false
+        mode = .orb
         historyOpen = false
         selectedTurn = nil
         state = .idle
@@ -118,8 +119,7 @@ final class OrbitPanelModel: ObservableObject {
     func send() {
         let pending = debugText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !pending.isEmpty else {
-            isExpanded = true
-            chatOpen = true
+            mode = .voice
             return
         }
         submit(transcript: pending)
@@ -136,8 +136,7 @@ final class OrbitPanelModel: ObservableObject {
         streamText = ""
         hintText = nil
         state = .thinking
-        isExpanded = false
-        chatOpen = true
+        mode = .thinking
         historyOpen = false
         selectedTurn = nil
         answerTask = Task { @MainActor [weak self] in
@@ -171,7 +170,7 @@ final class OrbitPanelModel: ObservableObject {
             )
             let tools = fired.map(\.rawValue).sorted()
             self.store.append(ChatTurn(transcript: text, reply: self.streamText, tools: tools))
-            self.chatOpen = true
+            self.mode = .output
             self.state = .idle
         }
     }
@@ -180,14 +179,6 @@ final class OrbitPanelModel: ObservableObject {
 private final class OrbitPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
-}
-
-// Pure panel-sizing rule: the chat card (~190pt content + 20pt close-cross
-// pad + 12pt root pad) must never render inside the 80pt collapsed frame.
-func orbitPanelSize(expanded: Bool, chatOpen: Bool) -> NSSize {
-    if expanded { return NSSize(width: 218, height: 76) }
-    if chatOpen { return NSSize(width: 234, height: 168) }
-    return NSSize(width: 80, height: 92)
 }
 
 @MainActor
@@ -228,14 +219,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             self?.persistPanelAnchor()
         }
 
-        model.$isExpanded
-            .removeDuplicates()
-            .sink { [weak self] _ in
-                self?.resizePanelForModel()
-            }
-            .store(in: &cancellables)
-
-        model.$chatOpen
+        model.$mode
             .removeDuplicates()
             .sink { [weak self] _ in
                 self?.resizePanelForModel()
@@ -251,7 +235,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func positionPanel() {
-        let size = panelSize(expanded: false, chatOpen: false)
+        let size = surfaceSize(.orb)
         guard let panel else { return }
 
         let origin: NSPoint
@@ -272,16 +256,16 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func resizePanelForModel() {
-        resizePanel(expanded: model.isExpanded, chatOpen: model.chatOpen)
+        resizePanel(mode: model.mode)
     }
 
-    private func resizePanel(expanded: Bool, chatOpen: Bool) {
+    private func resizePanel(mode: SurfaceMode) {
         guard let panel else { return }
 
         pendingCollapse?.cancel()
 
-        let size = panelSize(expanded: expanded, chatOpen: chatOpen)
-        NSLog("orbit: resize expanded=\(expanded) chatOpen=\(chatOpen) new=\(size) was=\(panel.frame)")
+        let size = surfaceSize(mode)
+        NSLog("orbit: resize mode=\(mode) expanded=\(model.isExpanded) chatOpen=\(model.chatOpen) new=\(size) was=\(panel.frame)")
         let maxX = panel.frame.maxX
         let midY = panel.frame.midY
         let frame = NSRect(
@@ -291,7 +275,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             height: size.height
         )
 
-        if expanded || chatOpen {
+        if mode != .orb {
             panel.setFrame(frame, display: true)
             panel.makeKeyAndOrderFront(nil)
             return
@@ -302,10 +286,6 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         }
         pendingCollapse = collapse
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: collapse)
-    }
-
-    private func panelSize(expanded: Bool, chatOpen: Bool) -> NSSize {
-        orbitPanelSize(expanded: expanded, chatOpen: chatOpen)
     }
 
     private func preferredScreen() -> NSScreen? {

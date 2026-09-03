@@ -11,8 +11,9 @@ final class ChatModelTests: XCTestCase {
         model.activate()
         model.debugText = "   "
         model.send()
+        XCTAssertEqual(model.mode, .voice)
         XCTAssertTrue(model.isExpanded)
-        XCTAssertTrue(model.chatOpen)
+        XCTAssertFalse(model.chatOpen)
         XCTAssertEqual(model.state, .listening)
     }
     func testSubmitStreamsStubToCompletion() async {
