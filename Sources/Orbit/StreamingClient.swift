@@ -36,7 +36,6 @@ public struct OpenRouterTokenStreamer: TokenStreamer {
                         continuation.finish()
                         return
                     }
-                    var failed = false
                     for try await line in bytes.lines {
                         for token in StreamParse.tokenDeltas(fromSSELine: line) { continuation.yield(token) }
                     }
