@@ -57,17 +57,47 @@ struct OrbitOverlayView: View {
                     )
             }
 
-            if !model.isExpanded, let result = model.resultText, !result.isEmpty {
-                Text(result)
-                    .font(.system(size: 10))
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
+            if !model.isExpanded, model.chatOpen {
+                ZStack(alignment: .topTrailing) {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        if let hint = model.hintText, !hint.isEmpty {
+                            Text(hint)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .transition(.blurReplace.combined(with: .opacity))
+                        }
+                        if !model.streamText.isEmpty {
+                            Text(model.streamText)
+                                .font(.system(size: 10))
+                                .lineLimit(3)
+                                .truncationMode(.tail)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
+                                .frame(maxWidth: 190, alignment: .trailing)
+                                .accessibilityLabel("Orbit reply")
+                                .transition(.blurReplace.combined(with: .opacity))
+                        }
+                    }
                     .frame(maxWidth: 190, alignment: .trailing)
-                    .accessibilityLabel("Orbit reply")
+                    .padding(.trailing, 20)
+                    .animation(.easeInOut(duration: 0.46), value: model.hintText)
+                    .animation(.easeInOut(duration: 0.46), value: model.streamText)
+
+                    Button {
+                        model.closeChat()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .focusable(false)
+                    .accessibilityLabel("Close chat")
+                }
+                .frame(maxWidth: 190, alignment: .trailing)
             }
 
             if model.isMockVoice, model.isExpanded {

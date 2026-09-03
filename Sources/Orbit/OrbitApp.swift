@@ -8,6 +8,9 @@ final class OrbitPanelModel: ObservableObject {
     @Published var isExpanded = false
     @Published var resultText: String?
     @Published var debugText = ""
+    @Published var streamText = ""
+    @Published var hintText: String?
+    @Published var chatOpen = false
 
     let microphone = MicrophoneMonitor()
     let context: ContextService
@@ -81,18 +84,25 @@ final class OrbitPanelModel: ObservableObject {
         voice.stop()
         microphone.stop()
         resultText = nil
+        streamText = ""
+        hintText = nil
+        chatOpen = false
         state = .idle
         isExpanded = false
     }
 
+    func closeChat() {
+        streamText = ""
+        hintText = nil
+        chatOpen = false
+        state = .idle
+    }
+
     func send() {
-        microphone.stop()
-        voice.stop()
         let pending = debugText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !pending.isEmpty else {
-            resultText = nil
-            state = .idle
-            isExpanded = false
+            isExpanded = true
+            chatOpen = true
             return
         }
         submit(transcript: pending)
@@ -106,13 +116,30 @@ final class OrbitPanelModel: ObservableObject {
         microphone.stop()
         voice.stop()
         resultText = nil
+        streamText = ""
+        hintText = nil
         state = .thinking
         isExpanded = false
+        chatOpen = true
         answerTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            let answer = await self.talk.answer(transcript: text)
+            await self.talk.answerStream(
+                transcript: text,
+                onHint: { hint in
+                    Task { @MainActor [weak self] in
+                        self?.hintText = hint
+                    }
+                },
+                onToken: { token in
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        self.hintText = nil
+                        self.streamText += token
+                    }
+                }
+            )
             guard !Task.isCancelled else { return }
-            self.resultText = answer
+            self.chatOpen = true
             self.state = .idle
         }
     }
