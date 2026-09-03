@@ -27,3 +27,28 @@ swift run Orbit
 ```
 
 Click the orb to open its live microphone waveform. Hover the waveform to reveal cancel and send controls; Escape cancels and Return sends. macOS will request microphone access the first time the interaction opens.
+
+## See + Talk
+
+The prototype now answers short voice/text prompts with tool-gated context:
+
+- **See:** "What am I looking at?" collects the front app + window and requests a screenshot note; pasted text is only included when present; clipboard is only read when explicitly allowed. Denied/unavailable sources degrade to a graceful `.unavailable` path — never a leak.
+- **Talk:** Send (or Return) goes thinking → async answer → a small 2-line result bubble under the capsule → idle. Escape cancels the in-flight answer.
+
+### Text testing without a mic
+
+```bash
+swift run Orbit -- --mock-voice
+```
+
+With `--mock-voice`, an inject field appears under the expanded capsule: type a transcript and press Return to run the full Talk path with `MockVoiceSession` (no microphone, no network key required).
+
+### Keys (`.env.local`, never committed)
+
+Copy nothing into the repo; create an untracked `.env.local` at the repo root with any of these names:
+
+- `OPENROUTER_API_KEY` — enables live answers via OpenRouter chat completions.
+- `OPENROUTER_MODEL` — model name (default `openai/gpt-4o-mini`).
+- `ASSEMBLYAI_API_KEY` — enables live mic transcription; without it (or with `--mock-voice`) the shell uses `MockVoiceSession`.
+
+Without keys the app still runs: `OpenRouterClient` falls back to a local stub reply (`Heard: … | app: … | screenshot: … | paste: … chars.`) so the whole See + Talk flow is exercisable offline.

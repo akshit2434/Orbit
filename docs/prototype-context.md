@@ -16,7 +16,7 @@ It validates:
 - Position persistence across launches.
 - A clean separation between the floating shell and future reasoning/tool services.
 
-It does not yet implement speech recognition, spoken responses, screen understanding, browser control, connected accounts, or Solari execution.
+It does not yet implement spoken responses, browser control, connected accounts, or Solari execution. Speech recognition (AssemblyAI), text replies (OpenRouter), and tool-gated screen/clipboard context now exist behind the boundaries below.
 
 ## Runtime shape
 
@@ -26,11 +26,14 @@ OrbitApp
       ├─ accessory NSPanel
       ├─ position restoration and persistence
       └─ OrbitPanelModel
-          ├─ OrbitState
-          └─ MicrophoneMonitor
+          ├─ OrbitState (+ resultText / debugText / isMockVoice)
+          ├─ MicrophoneMonitor
+          ├─ ContextService (active-app, pastedText, clipboard-gated, screenshot note)
+          ├─ TalkSession (TalkController.selectTools → ContextService.collect → OpenRouterClient.complete)
+          └─ VoiceSession (MockVoiceSession with --mock-voice, else AssemblyAISTTSession)
 ```
 
-The executable is packaged with Swift Package Manager. `Support/Info.plist` supplies the accessory-app and microphone usage metadata required by the panel and audio path.
+The executable is packaged with Swift Package Manager. `Support/Info.plist` supplies the accessory-app and microphone usage metadata required by the panel and audio path. `EnvLoader` builds `OrbitConfig` from process env over repo-root `.env.local` (key names: `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `ASSEMBLYAI_API_KEY`); without keys the Talk path degrades to a local stub reply so the UI flow stays testable offline.
 
 ## Interaction contract
 
@@ -44,7 +47,11 @@ A stationary click expands the native panel before the visual capsule appears. T
 
 ### Thinking
 
-Send stops microphone capture, collapses the surface, and moves the orb to the thinking color and stronger breathing treatment. The current prototype stops at this visual state; real reasoning will replace this transition later.
+Send stops microphone capture, collapses the surface, and moves the orb to the thinking color and stronger breathing treatment. `OrbitPanelModel.submit(transcript:)` then awaits `TalkSession.answer(transcript:)` on a cancellable task; the answer lands in `resultText` (small 2-line bubble under the collapsed capsule) and the orb returns to idle. Escape cancels the task and clears the result.
+
+### Mock voice
+
+Launched with `--mock-voice`, the model uses `MockVoiceSession` and shows a text inject field while expanded (Return submits). This exercises the full Think → answer → result path without microphone or network keys.
 
 ### Input precedence
 
@@ -52,14 +59,15 @@ Pointer movement takes precedence over activation. A small drag threshold preven
 
 ## State and service boundaries
 
-`OrbitPanelModel` owns only shell state and user intent for this prototype. Keep future services separate:
+`OrbitPanelModel` owns only shell state and user intent for this prototype. Services stay separate:
 
-- Voice provider events should map into `OrbitState` and audio levels through an adapter.
-- Screen and active-window context should be collected by a local context service.
-- Browser, connected-account, and Solari operations should be exposed as internal tools rather than embedded in the view.
-- Long-running work should have task IDs, parent/child relationships, cancellation, and observable progress from the beginning.
+- `VoiceSession` (real: `AssemblyAISTTSession`; mock: `MockVoiceSession`) delivers final transcripts into `submit(transcript:)`; the view never sees provider callbacks.
+- `TalkController.selectTools(transcript:hasPaste:clipboardAllowed:)` is the only place that decides which `ContextTool`s fire: screen words → `.screenshot` + `.activeAppWindow`; non-empty paste → `.pastedText`; explicit opt-in → `.clipboard`. Nothing else can pull context.
+- `ContextService.collect(tools:)` enforces the gates: clipboard reads only when `clipboardAllowed`, screenshot capture only appends a `screenshot-requested` note (async `captureScreenshot()` fills `screenshotPNG` separately), empty tools yield an empty bundle.
+- `OpenRouterClient.complete(transcript:context:)` builds the prompt only from the collected bundle (front-app name, pasted text, clipboard, screenshot flag) and falls back to the stub reply when no key is configured. API keys never appear in logs, replies, or diffs.
+- Long-running work should have task IDs, parent/child relationships, cancellation, and observable progress from the beginning. (Today: the answer `Task` is cancellable on Escape/activate; deeper task tracking is still owed.)
 
-The orb renderer should remain provider-independent. AssemblyAI and Solari are planned integrations, not assumptions the view layer should know about.
+The orb renderer remains provider-independent. AssemblyAI and OpenRouter are integrations behind `VoiceSession` / `OpenRouterClient`, not assumptions the view layer knows about.
 
 ## Development
 
@@ -68,10 +76,11 @@ From the repository root:
 ```bash
 swift build
 swift run Orbit
+swift run Orbit -- --mock-voice   # text inject, no mic or keys needed
 ```
 
-The first listening interaction may prompt for microphone access. The current verification baseline is a successful `swift build`, a clean `git diff --check`, and manual validation of click, drag, hover, Escape, Return, and relaunch-position behavior on macOS.
+The first listening interaction may prompt for microphone access. The current verification baseline is a successful `swift build`, 21/21 `swift test`, a clean `git diff --check`, `.env.local` untracked, and manual validation of click, drag, hover, Escape, Return, and relaunch-position behavior on macOS. Full GUI manual checklist with `--mock-voice` remains owed in a headed session (Task 7 recorded it N/A-headless with build/test evidence).
 
 ## Next vertical slice
 
-The next meaningful slice is “See + Talk”: add structured active-app, active-window, browser, and screenshot context, then connect a real voice session without coupling provider callbacks directly to the orb view.
+The next meaningful slice is richer “See”: attach real screenshot bytes via `captureScreenshot()`, add browser/active-window titles, then connected accounts and Solari execution as internal tools behind the same gating pattern.
