@@ -17,6 +17,13 @@ final class StreamingTests: XCTestCase {
         for await t in s.stream(model: "m", messages: [], apiKey: "") { got.append(t) }
         XCTAssertEqual(got, ["abc"])
     }
+    func testStubYieldsChunksInOrder() async {
+        let s = StubTokenStreamer(texts: ["a", "b", "c"])
+        var got: [String] = []
+        for await t in s.stream(model: "m", messages: [], apiKey: "") { got.append(t) }
+        XCTAssertEqual(got, ["a", "b", "c"])
+        XCTAssertEqual(got.joined(), "abc")
+    }
     func testHintStringsFollowTools() {
         XCTAssertEqual(TalkController.hintStrings(for: [.screenshot, .activeAppWindow]),
                        ["glancing at your screen… noting the front app…"])
@@ -37,7 +44,7 @@ final class StreamingTests: XCTestCase {
         XCTAssertTrue(tokensBox.v[0].contains("what am I looking at?"))
     }
     @MainActor func testHistoryBecomesPriorMessages() {
-        let msgs = TalkSession.messages(transcript: "and it?", history: [
+        let msgs = TalkController.messages(transcript: "and it?", context: ContextBundle(), history: [
             ChatTurn(transcript: "what am I looking at?", reply: "A browser.", tools: ["screenshot"])
         ])
         let joined = msgs.map { $0["content"] ?? "" }.joined(separator: "\n")

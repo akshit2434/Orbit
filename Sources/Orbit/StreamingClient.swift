@@ -50,9 +50,14 @@ public struct OpenRouterTokenStreamer: TokenStreamer {
 }
 
 public struct StubTokenStreamer: TokenStreamer {
-    public var text: String
-    public init(text: String) { self.text = text }
+    public var texts: [String]
+    public init(text: String) { self.texts = [text] }
+    public init(texts: [String]) { self.texts = texts }
     public func stream(model: String, messages: [[String: String]], apiKey: String) -> AsyncStream<String> {
-        AsyncStream { $0.yield(text); $0.finish() }
+        let chunks = texts
+        return AsyncStream { continuation in
+            for chunk in chunks { continuation.yield(chunk) }
+            continuation.finish()
+        }
     }
 }

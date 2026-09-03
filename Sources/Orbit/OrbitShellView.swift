@@ -66,7 +66,7 @@ struct OrbitOverlayView: View {
                 }
                 .transition(.blurReplace.combined(with: .opacity))
                 if model.isMockVoice {
-                    TextField("mock transcript", text: $model.debugText)
+                    TextField("mock transcript", text: $model.mockText)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11))
                         .frame(width: 190)
@@ -76,17 +76,37 @@ struct OrbitOverlayView: View {
                         .accessibilityLabel("Mock transcript inject")
                 }
             case .thinking:
-                HStack(alignment: .center, spacing: 8) {
-                    thinkingBubble
-                    surface
-                        .frame(width: 56, height: 56)
+                Group {
+                    if bubbleLeading(for: model.side) {
+                        HStack(alignment: .center, spacing: 8) {
+                            thinkingBubble
+                            surface
+                                .frame(width: 56, height: 56)
+                        }
+                    } else {
+                        HStack(alignment: .center, spacing: 8) {
+                            surface
+                                .frame(width: 56, height: 56)
+                            thinkingBubble
+                        }
+                    }
                 }
                 .transition(.blurReplace.combined(with: .opacity))
             case .output:
-                HStack(alignment: .center, spacing: 8) {
-                    outputBubble
-                    surface
-                        .frame(width: 56, height: 56)
+                Group {
+                    if bubbleLeading(for: model.side) {
+                        HStack(alignment: .center, spacing: 8) {
+                            outputBubble
+                            surface
+                                .frame(width: 56, height: 56)
+                        }
+                    } else {
+                        HStack(alignment: .center, spacing: 8) {
+                            surface
+                                .frame(width: 56, height: 56)
+                            outputBubble
+                        }
+                    }
                 }
                 .transition(.blurReplace.combined(with: .opacity))
             case .card, .history:
@@ -140,6 +160,7 @@ struct OrbitOverlayView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .focusable(false)
+            .focusEffectDisabled()
             .keyboardShortcut(.cancelAction)
             .accessibilityLabel("Close chat")
         }
@@ -163,6 +184,7 @@ struct OrbitOverlayView: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
+            .focusEffectDisabled()
             .accessibilityLabel("Expand to card")
             .padding(.leading, 20)
             .transition(.blurReplace.combined(with: .opacity))
@@ -176,6 +198,7 @@ struct OrbitOverlayView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .focusable(false)
+            .focusEffectDisabled()
             .keyboardShortcut(.cancelAction)
             .accessibilityLabel("Close chat")
         }
@@ -202,6 +225,7 @@ struct OrbitOverlayView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .focusable(false)
+                .focusEffectDisabled()
                 .accessibilityLabel("Copy reply")
                 Button {
                     model.closeChat()
@@ -213,6 +237,7 @@ struct OrbitOverlayView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .focusable(false)
+                .focusEffectDisabled()
                 .keyboardShortcut(.cancelAction)
                 .accessibilityLabel("Close chat")
             }
@@ -237,6 +262,7 @@ struct OrbitOverlayView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .focusable(false)
+                .focusEffectDisabled()
                 .accessibilityLabel("Back to history")
                 Text(selected.reply)
                     .font(.system(size: 10))
@@ -251,7 +277,7 @@ struct OrbitOverlayView: View {
             } else if !model.store.turns.isEmpty {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 4) {
-                        ForEach(Array(model.store.turns.enumerated()), id: \.offset) { _, turn in
+                        ForEach(model.store.turns) { turn in
                             Button {
                                 model.selectedTurn = turn
                             } label: {
@@ -267,6 +293,7 @@ struct OrbitOverlayView: View {
                             }
                             .buttonStyle(.plain)
                             .focusable(false)
+                            .focusEffectDisabled()
                             .accessibilityLabel("Reread turn")
                         }
                     }
@@ -317,6 +344,7 @@ struct OrbitOverlayView: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
+        .focusEffectDisabled()
         .accessibilityLabel("Show history")
         .opacity(isHovered && !model.isExpanded ? 1 : 0)
         .scaleEffect(isHovered && !model.isExpanded ? 1 : 0.8)
@@ -328,7 +356,7 @@ struct OrbitOverlayView: View {
 
     private var cardInputRow: some View {
         HStack(spacing: 6) {
-            TextField("Ask…", text: $model.debugText)
+            TextField("Ask…", text: $model.askText)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 10))
                 .onSubmit {
@@ -345,6 +373,7 @@ struct OrbitOverlayView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .focusable(false)
+            .focusEffectDisabled()
             .accessibilityLabel("Voice input")
         }
         .frame(maxWidth: 280, alignment: .trailing)

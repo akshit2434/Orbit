@@ -27,6 +27,7 @@ final class SurfaceTests: XCTestCase {
     func testWorkedString() {
         XCTAssertEqual(workedString(elapsed: 3), "Worked for 3s")
         XCTAssertEqual(workedString(elapsed: 64), "Worked for 1m 4s")
+        XCTAssertEqual(workedString(elapsed: 60), "Worked for 1m 0s")
     }
     func testSnapTargetsNearestEdge() {
         let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
@@ -71,5 +72,67 @@ final class SurfaceTests: XCTestCase {
             XCTAssertEqual(p.x, 12, accuracy: 0.5, "side \(side) must clamp x on-screen")
             XCTAssertLessThanOrEqual(p.x + newSize.width, screen.maxX - 12 + 0.5)
         }
+    }
+    func testPlacementClampsYTopBottom() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let size = NSSize(width: 320, height: 400)
+        // Anchor near bottom: above placement would go off-screen without clamp.
+        let lowAnchor = PanelAnchor(maxX: 900, midY: 30)
+        for side: ExpansionSide in [.left, .right, .above, .below] {
+            let p = placementOrigin(anchor: lowAnchor, size: size, side: side, screen: screen)
+            XCTAssertGreaterThanOrEqual(p.y, 12 - 0.5, "side \(side) must clamp y >= margin")
+            XCTAssertLessThanOrEqual(p.y + size.height, screen.maxY - 12 + 0.5)
+        }
+        // Anchor near top: below placement would go off-screen without clamp.
+        let highAnchor = PanelAnchor(maxX: 900, midY: 770)
+        for side: ExpansionSide in [.left, .right, .above, .below] {
+            let p = placementOrigin(anchor: highAnchor, size: size, side: side, screen: screen)
+            XCTAssertGreaterThanOrEqual(p.y, 12 - 0.5, "side \(side) must clamp y >= margin")
+            XCTAssertLessThanOrEqual(p.y + size.height, screen.maxY - 12 + 0.5)
+        }
+    }
+    func testResizeClampsYTopBottom() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let newSize = NSSize(width: 320, height: 400)
+        let low = NSRect(x: 900, y: 0, width: 80, height: 92)
+        let high = NSRect(x: 900, y: 708, width: 80, height: 92)
+        for current in [low, high] {
+            for side: ExpansionSide in [.left, .right, .above, .below] {
+                let p = resizeOrigin(current: current, newSize: newSize, side: side, screen: screen)
+                XCTAssertGreaterThanOrEqual(p.y, 12 - 0.5, "side \(side) must clamp y >= margin")
+                XCTAssertLessThanOrEqual(p.y + newSize.height, screen.maxY - 12 + 0.5)
+            }
+        }
+    }
+    func testSideTieBreak() {
+        // Square screen center: horizontal and left/right both tie.
+        // Horizontal wins ties, and .left wins left/right ties.
+        let square = CGRect(x: 0, y: 0, width: 1000, height: 1000)
+        XCTAssertEqual(expansionSide(anchorX: 500, anchorY: 500, screen: square), .left)
+        // Wide screen center: vertical wins, top/bottom tie goes .below.
+        let wide = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        XCTAssertEqual(expansionSide(anchorX: 500, anchorY: 400, screen: wide), .below)
+    }
+    func testRightPlacementKeepsOrbLeft() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let anchor = PanelAnchor(maxX: 92, midY: 400)
+        let size = NSSize(width: 320, height: 400)
+        let p = placementOrigin(anchor: anchor, size: size, side: .right, screen: screen)
+        // Orb 80 wide: orbLeft = 92 - 80 = 12, panel extends right toward center.
+        XCTAssertEqual(p.x, 12, accuracy: 0.5)
+        XCTAssertEqual(p.y, 200, accuracy: 0.5)
+    }
+    func testBubbleLeadingOnlyOnLeft() {
+        XCTAssertTrue(bubbleLeading(for: .left))
+        XCTAssertFalse(bubbleLeading(for: .right))
+        XCTAssertFalse(bubbleLeading(for: .above))
+        XCTAssertFalse(bubbleLeading(for: .below))
+    }
+    func testCorruptAnchorLoadReturnsNil() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let file = base.appendingPathComponent("anchor.json")
+        try "not json".write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertNil(AnchorStore.load(base: base))
     }
 }

@@ -27,7 +27,7 @@ OrbitApp
       ├─ position restoration and persistence
       └─ OrbitPanelModel
           ├─ SurfaceMode (orb / voice / thinking / output / card / history) + OrbitState
-          ├─ debugText / streamText / hintText / workStart / isMockVoice (+ computed isExpanded / chatOpen)
+          ├─ mockText / askText / streamText / hintText / workStart / isMockVoice (+ computed isExpanded / chatOpen)
           ├─ selectedTurn + ChatStore (cap 50)
           ├─ MicrophoneMonitor
           ├─ ContextService (active-app, pastedText, clipboard-gated, screenshot note)
@@ -45,7 +45,7 @@ The visible orb is 30 px inside a 56 px interaction canvas. It breathes slowly, 
 
 ### Modes
 
-One `SurfaceMode` drives the view, the panel size, and edge-aware placement (see the locked contract in [Orb UI Style](orb-ui-style.md)): orb 80×92, voice 218×76, thinking 250×80, output 250×120, card/history 320×400. Thinking shows the hint bubble left of the orb; output shows the short reply bubble (click expands to the card); card and history share the big card with the `Worked for Xs` timer, copy button, `Ask…` + mic input row, orb docked at the edge, and the session history list. The bubble/card extend toward the screen center based on the nearest edge (left/right win ties); above/below placement clamps x on-screen. Dragging moves the panel live and releases with a ~0.35 s magnetic snap to the nearest edge (12 pt margin); the anchor persists to `anchor.json` under `Application Support/com.akshit2434.orbit` only after the snap completes. Diagnostic resize logging and the retired `resultText` property are removed.
+One `SurfaceMode` drives the view, the panel size, and edge-aware placement (see the locked contract in [Orb UI Style](orb-ui-style.md)): orb 80×92, voice 218×76, thinking 250×80, output 250×120, card/history 320×400. Thinking shows the hint bubble and output shows the short reply bubble (click expands to the card), mirrored by `ExpansionSide` so content extends toward the screen center (bubble-left only on `.left`, otherwise orb-left/bubble-right); card and history share the big card with the `Worked for Xs` timer, copy button, `Ask…` + mic input row, orb docked at the edge, and the session history list. The bubble/card extend toward the screen center based on the nearest edge (left/right win ties); above/below placement clamps x on-screen and all placements clamp y on-screen (12 pt margin, oversize-safe). Dragging moves the panel live and releases with a ~0.35 s magnetic snap to the nearest edge (12 pt margin); the anchor persists to `anchor.json` under `Application Support/com.akshit2434.orbit` only after the snap completes. The retired `resultText` property is removed; one `orbit: mode=` log line stays until headed confirm.
 
 ### Listening
 

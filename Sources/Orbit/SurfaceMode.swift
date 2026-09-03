@@ -78,6 +78,20 @@ private func clampedX(_ x: CGFloat, sizeWidth: CGFloat, screen: CGRect) -> CGFlo
     return min(max(x, minX), max(minX, maxX))
 }
 
+private func clampedY(_ y: CGFloat, sizeHeight: CGFloat, screen: CGRect) -> CGFloat {
+    let margin: CGFloat = 12
+    let minY = screen.minY + margin
+    let maxY = screen.maxY - sizeHeight - margin
+    return min(max(y, minY), max(minY, maxY))
+}
+
+/// Bubble order for side-aware layout: only `.left` keeps bubble-left/orb-right.
+/// `.right`/`.above`/`.below` mirror to orb-left/bubble-right so content
+/// extends toward the screen center.
+func bubbleLeading(for side: ExpansionSide) -> Bool {
+    side == .left
+}
+
 func placementOrigin(
     anchor: PanelAnchor, size: NSSize, side: ExpansionSide, screen: CGRect? = nil
 ) -> NSPoint {
@@ -97,7 +111,9 @@ func placementOrigin(
         origin = NSPoint(x: anchor.maxX - size.width, y: orbTop - size.height)
     }
     guard let screen else { return origin }
-    return NSPoint(x: clampedX(origin.x, sizeWidth: size.width, screen: screen), y: origin.y)
+    return NSPoint(
+        x: clampedX(origin.x, sizeWidth: size.width, screen: screen),
+        y: clampedY(origin.y, sizeHeight: size.height, screen: screen))
 }
 
 func resizeOrigin(
@@ -116,7 +132,8 @@ func resizeOrigin(
     }
     guard let screen else { return origin }
     return NSPoint(
-        x: clampedX(origin.x, sizeWidth: newSize.width, screen: screen), y: origin.y)
+        x: clampedX(origin.x, sizeWidth: newSize.width, screen: screen),
+        y: clampedY(origin.y, sizeHeight: newSize.height, screen: screen))
 }
 
 struct PanelAnchor: Codable, Equatable {
@@ -126,8 +143,11 @@ struct PanelAnchor: Codable, Equatable {
 
 enum AnchorStore {
     static func defaultBase() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("com.akshit2434.orbit", isDirectory: true)
+        if let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            return base.appendingPathComponent("com.akshit2434.orbit", isDirectory: true)
+        }
+        return FileManager.default.temporaryDirectory.appendingPathComponent(
+            "com.akshit2434.orbit", isDirectory: true)
     }
 
     static func url(base: URL? = nil) -> URL {
@@ -141,10 +161,18 @@ enum AnchorStore {
 
     static func save(_ anchor: PanelAnchor, base: URL? = nil) {
         let file = url(base: base)
-        try? FileManager.default.createDirectory(
-            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(anchor) {
-            try? data.write(to: file, options: .atomic)
+        do {
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        } catch {
+            NSLog("orbit: anchor save mkdir failed: %@", error.localizedDescription)
+            return
+        }
+        do {
+            let data = try JSONEncoder().encode(anchor)
+            try data.write(to: file, options: .atomic)
+        } catch {
+            NSLog("orbit: anchor save failed: %@", error.localizedDescription)
         }
     }
 }

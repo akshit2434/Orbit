@@ -7,10 +7,12 @@ final class OrbitPanelModel: ObservableObject {
     @Published var state: OrbitState = .idle
     @Published var mode: SurfaceMode = .orb
     var isExpanded: Bool { mode == .voice }
-    @Published var debugText = ""
+    @Published var mockText = ""
+    @Published var askText = ""
     @Published var streamText = ""
     @Published var hintText: String?
     @Published var workStart: Date?
+    @Published var side: ExpansionSide = .left
     var chatOpen: Bool {
         mode == .thinking || mode == .output || mode == .card || mode == .history
     }
@@ -131,8 +133,12 @@ final class OrbitPanelModel: ObservableObject {
     }
 
     func send() {
-        let pending = debugText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isChatMode =
+            mode == .card || mode == .history || mode == .output || mode == .thinking
+        let source = isChatMode ? askText : mockText
+        let pending = source.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !pending.isEmpty else {
+            if isChatMode { return }
             mode = .voice
             return
         }
@@ -152,6 +158,15 @@ final class OrbitPanelModel: ObservableObject {
         state = .thinking
         mode = .thinking
         selectedTurn = nil
+        askText = ""
+        mockText = ""
+        final class Accumulator: @unchecked Sendable {
+            private let lock = NSLock()
+            private var chunks: [String] = []
+            func append(_ s: String) { lock.withLock { chunks.append(s) } }
+            var value: String { lock.withLock { chunks.joined() } }
+        }
+        let accumulator = Accumulator()
         answerTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.talk.answerStream(
@@ -164,6 +179,7 @@ final class OrbitPanelModel: ObservableObject {
                     }
                 },
                 onToken: { token in
+                    accumulator.append(token)
                     Task { @MainActor [weak self] in
                         guard let self else { return }
                         guard self.answerTask != nil else { return }
@@ -179,13 +195,20 @@ final class OrbitPanelModel: ObservableObject {
             await Task.yield()
             guard !Task.isCancelled else { return }
             guard self.answerTask != nil else { return }
+            let reply = accumulator.value
+            self.streamText = reply
+            if self.workStart == nil, !reply.isEmpty {
+                self.workStart = Date()
+            }
+            self.hintText = nil
             let fired = TalkController.selectTools(
                 transcript: text,
                 hasPaste: !self.context.pastedText.isEmpty,
                 clipboardAllowed: self.context.clipboardAllowed
             )
             let tools = fired.map(\.rawValue).sorted()
-            self.store.append(ChatTurn(transcript: text, reply: self.streamText, tools: tools))
+            self.store.append(ChatTurn(transcript: text, reply: reply, tools: tools))
+            self.answerTask = nil
             self.mode = .output
             self.state = .idle
         }
@@ -292,6 +315,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
         let side = expansionSide(
             anchorX: panel.frame.maxX, anchorY: panel.frame.midY, screen: screenFrame)
+        model.side = side
         let origin = resizeOrigin(current: panel.frame, newSize: size, side: side, screen: screenFrame)
         let frame = NSRect(origin: origin, size: size)
 

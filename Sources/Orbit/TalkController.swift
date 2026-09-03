@@ -1,11 +1,22 @@
 import Foundation
 
-public struct ChatTurn: Equatable, Sendable {
+public struct ChatTurn: Identifiable, Hashable, Sendable {
+    public var id: UUID
     public var transcript: String
     public var reply: String
     public var tools: [String]
-    public init(transcript: String, reply: String, tools: [String]) {
-        self.transcript = transcript; self.reply = reply; self.tools = tools
+    public init(id: UUID = UUID(), transcript: String, reply: String, tools: [String]) {
+        self.id = id; self.transcript = transcript; self.reply = reply; self.tools = tools
+    }
+
+    public static func == (lhs: ChatTurn, rhs: ChatTurn) -> Bool {
+        lhs.transcript == rhs.transcript && lhs.reply == rhs.reply && lhs.tools == rhs.tools
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(transcript)
+        hasher.combine(reply)
+        hasher.combine(tools)
     }
 }
 
@@ -51,10 +62,12 @@ public enum TalkController {
 public final class TalkSession {
     private let context: ContextService
     private let client: OpenRouterClient
+    private let streamer: any TokenStreamer
 
-    public init(context: ContextService, client: OpenRouterClient) {
+    public init(context: ContextService, client: OpenRouterClient, streamer: any TokenStreamer = OpenRouterTokenStreamer()) {
         self.context = context
         self.client = client
+        self.streamer = streamer
     }
 
     public func answer(transcript: String) async -> String {
@@ -78,24 +91,9 @@ public final class TalkSession {
             onToken(OpenRouterClient.stub(transcript: transcript, context: bundle))
             return
         }
-        let streamer = OpenRouterTokenStreamer()
         let msgs = TalkController.messages(transcript: transcript, context: bundle, history: history)
         for await token in streamer.stream(model: client.config.openRouterModel, messages: msgs, apiKey: client.config.openRouterKey ?? "") {
             onToken(token)
         }
-    }
-
-    public static func messages(transcript: String, context: ContextBundle, history: [ChatTurn]) -> [[String: String]] {
-        TalkController.messages(transcript: transcript, context: context, history: history)
-    }
-
-    public static func messages(transcript: String, history: [ChatTurn]) -> [[String: String]] {
-        var msgs = [["role": "system", "content": OpenRouterClient.systemPrompt]]
-        for turn in history.suffix(6) {
-            msgs.append(["role": "user", "content": turn.transcript])
-            msgs.append(["role": "assistant", "content": turn.reply])
-        }
-        msgs.append(["role": "user", "content": "User said: \(transcript)"])
-        return msgs
     }
 }
