@@ -126,10 +126,10 @@ struct OrbitOverlayView: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 2)
                 .onChanged { value in
-                    model.drag(to: value.translation)
+                    model.drag(to: value.translation, at: value.time.timeIntervalSinceReferenceDate)
                 }
                 .onEnded { _ in
-                    model.endDrag()
+                    model.endDrag(velocity: flingVelocity(model.dragSamples))
                 }
         )
         .allowsWindowActivationEvents()

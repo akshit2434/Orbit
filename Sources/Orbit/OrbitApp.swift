@@ -25,7 +25,10 @@ final class OrbitPanelModel: ObservableObject {
     var persistPosition: (() -> Void)?
     var movePanelBy: ((CGSize) -> Void)?
     var snapPanel: (() -> Void)?
+    var reassertPanel: (() -> Void)?
+    var dragSamples: [DragSample] = []
     private var lastDragTranslation: CGSize?
+    private var reassertWorkItem: DispatchWorkItem?
     private let talk: TalkSession
     private var voice: any VoiceSession
     private var answerTask: Task<Void, Never>?
@@ -73,28 +76,57 @@ final class OrbitPanelModel: ObservableObject {
         voice.start()
     }
 
-    func drag(to translation: CGSize) {
+    func drag(to translation: CGSize, withVelocity velocity: CGVector = .zero) {
         dragResetWorkItem?.cancel()
+        reassertWorkItem?.cancel()
+        reassertWorkItem = nil
         isDragging = true
         let last = lastDragTranslation ?? .zero
         let delta = CGSize(
             width: translation.width - last.width, height: translation.height - last.height)
         lastDragTranslation = translation
+        _ = velocity  // Reserved: edge hysteresis + clamp live in movePanel(by:).
         movePanelBy?(delta)
     }
 
-    func endDrag() {
+    func drag(to translation: CGSize, at timestamp: TimeInterval) {
+        if lastDragTranslation == nil {
+            dragSamples.removeAll(keepingCapacity: true)
+        }
+        dragSamples.append(
+            DragSample(
+                point: CGPoint(x: translation.width, y: translation.height), at: timestamp))
+        if dragSamples.count > 10 {
+            dragSamples.removeFirst(dragSamples.count - 10)
+        }
+        drag(to: translation)
+    }
+
+    func endDrag(velocity: CGVector = .zero) {
         lastDragTranslation = nil
+        let v: CGVector = velocity == .zero ? flingVelocity(dragSamples) : velocity
+        if v != .zero {
+            movePanelBy?(CGSize(width: v.dx * 0.18, height: v.dy * 0.18))
+        }
+        dragSamples.removeAll(keepingCapacity: true)
         // Persist happens only in snapPanelToEdge's completion handler (post-snap
         // frame); persisting here would write the pre-snap frame and a quit
         // during the 0.35s animation would keep the stale position.
         snapPanel?()
 
+        dragResetWorkItem?.cancel()
         let reset = DispatchWorkItem { [weak self] in
             self?.isDragging = false
         }
         dragResetWorkItem = reset
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: reset)
+
+        reassertWorkItem?.cancel()
+        let reassert = DispatchWorkItem { [weak self] in
+            self?.reassertPanel?()
+        }
+        reassertWorkItem = reassert
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: reassert)
     }
 
     func cancel() {
@@ -263,6 +295,9 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         model.snapPanel = { [weak self] in
             self?.snapPanelToEdge()
         }
+        model.reassertPanel = { [weak self] in
+            self?.reassertPanelToSnap()
+        }
 
         model.$mode
             .removeDuplicates()
@@ -376,9 +411,20 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
 
     private func movePanel(by delta: CGSize) {
         guard let panel else { return }
+        let screenFrame =
+            panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
+        let distanceToEdge = min(
+            panel.frame.minX - screenFrame.minX,
+            screenFrame.maxX - panel.frame.maxX,
+            panel.frame.minY - screenFrame.minY,
+            screenFrame.maxY - panel.frame.maxY)
+        let damped = hysteresisDamped(
+            delta: CGVector(dx: delta.width, dy: delta.height),
+            distanceToEdge: Double(distanceToEdge))
         var frame = panel.frame
-        frame.origin.x += delta.width
-        frame.origin.y -= delta.height
+        frame.origin.x += damped.dx
+        frame.origin.y -= damped.dy
+        frame = clampedDragFrame(frame, screen: screenFrame)
         panel.setFrame(frame, display: true)
     }
 
@@ -402,6 +448,17 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
                 self?.persistPanelAnchor()
             }
         }
+    }
+
+    private func reassertPanelToSnap() {
+        guard let panel else { return }
+        let screenFrame =
+            panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
+        let target = snapTarget(current: panel.frame, screen: screenFrame)
+        let drift = hypot(target.x - panel.frame.origin.x, target.y - panel.frame.origin.y)
+        guard drift > 2 else { return }
+        panel.setFrame(NSRect(origin: target, size: panel.frame.size), display: true)
+        persistPanelAnchor()
     }
 
     private func persistPanelAnchor() {

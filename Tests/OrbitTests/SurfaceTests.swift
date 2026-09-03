@@ -135,4 +135,45 @@ final class SurfaceTests: XCTestCase {
         try "not json".write(to: file, atomically: true, encoding: .utf8)
         XCTAssertNil(AnchorStore.load(base: base))
     }
+    func testFlingVelocityFromSamples() {
+        let v = flingVelocity([
+            DragSample(point: CGPoint(x: 0, y: 0), at: 0),
+            DragSample(point: CGPoint(x: 60, y: 0), at: 0.06),
+            DragSample(point: CGPoint(x: 120, y: 0), at: 0.12),
+        ])
+        XCTAssertEqual(v.dx, 1000, accuracy: 1)
+        XCTAssertEqual(flingVelocity([]).dx, 0)
+    }
+    func testHysteresisDampsNearEdge() {
+        let d = hysteresisDamped(delta: CGVector(dx: 10, dy: 0), distanceToEdge: 10)
+        XCTAssertEqual(d.dx, 3.5, accuracy: 0.01)
+        let far = hysteresisDamped(delta: CGVector(dx: 10, dy: 0), distanceToEdge: 200)
+        XCTAssertEqual(far.dx, 10, accuracy: 0.01)
+    }
+    func testClampedDragFrameKeepsTwoPtInside() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let off = clampedDragFrame(NSRect(x: -50, y: -50, width: 80, height: 92), screen: screen)
+        XCTAssertEqual(off.origin.x, 2, accuracy: 0.01)
+        XCTAssertEqual(off.origin.y, 2, accuracy: 0.01)
+        let over = clampedDragFrame(NSRect(x: 990, y: 780, width: 80, height: 92), screen: screen)
+        XCTAssertEqual(over.maxX, 998, accuracy: 0.01)
+        XCTAssertEqual(over.maxY, 798, accuracy: 0.01)
+    }
+    @MainActor
+    func testEndDragProjectsVelocityBeforeSnap() {
+        let svc = ContextService()
+        let client = OpenRouterClient(
+            config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))
+        let model = OrbitPanelModel(
+            isMockVoice: true, context: svc,
+            talk: TalkSession(context: svc, client: client), voice: MockVoiceSession())
+        var moves: [CGSize] = []
+        var snaps = 0
+        model.movePanelBy = { moves.append($0) }
+        model.snapPanel = { snaps += 1 }
+        model.endDrag(velocity: CGVector(dx: 1000, dy: 0))
+        XCTAssertEqual(snaps, 1)
+        XCTAssertEqual(moves.count, 1)
+        XCTAssertEqual(moves[0].width, 180, accuracy: 0.01)
+    }
 }

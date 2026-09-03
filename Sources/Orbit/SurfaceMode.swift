@@ -184,3 +184,41 @@ func workedString(elapsed: TimeInterval) -> String {
     }
     return "Worked for \(total / 60)m \(total % 60)s"
 }
+
+struct DragSample: Sendable {
+    var point: CGPoint
+    var at: TimeInterval
+}
+
+/// Velocity (pt/s) from the last ≤3 samples within a 120ms window, else .zero.
+func flingVelocity(_ samples: [DragSample]) -> CGVector {
+    guard samples.count >= 2, let endAt = samples.last?.at else { return .zero }
+    let recent = Array(samples.suffix(3)).filter { endAt - $0.at <= 0.12 }
+    guard recent.count >= 2,
+          let first = recent.first, let last = recent.last
+    else { return .zero }
+    let dt = last.at - first.at
+    guard dt > 0 else { return .zero }
+    return CGVector(
+        dx: (last.point.x - first.point.x) / dt,
+        dy: (last.point.y - first.point.y) / dt)
+}
+
+/// Edge hysteresis: ×0.35 when within 24pt of the edge, else unchanged.
+func hysteresisDamped(delta: CGVector, distanceToEdge: Double) -> CGVector {
+    guard distanceToEdge < 24 else { return delta }
+    return CGVector(dx: delta.dx * 0.35, dy: delta.dy * 0.35)
+}
+
+/// Tiling defense: keep the frame ≥2pt inside the visible frame.
+func clampedDragFrame(_ frame: NSRect, screen: CGRect) -> NSRect {
+    let inset: CGFloat = 2
+    let minX = screen.minX + inset
+    let maxX = screen.maxX - frame.width - inset
+    let minY = screen.minY + inset
+    let maxY = screen.maxY - frame.height - inset
+    var clamped = frame
+    clamped.origin.x = min(max(frame.origin.x, minX), max(minX, maxX))
+    clamped.origin.y = min(max(frame.origin.y, minY), max(minY, maxY))
+    return clamped
+}
