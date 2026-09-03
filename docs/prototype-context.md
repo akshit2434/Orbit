@@ -26,10 +26,11 @@ OrbitApp
       ├─ accessory NSPanel
       ├─ position restoration and persistence
       └─ OrbitPanelModel
-          ├─ OrbitState (+ resultText / debugText / isMockVoice)
+          ├─ OrbitState (+ resultText / debugText / streamText / hintText / isMockVoice)
+          ├─ chat flags (chatOpen / historyOpen / selectedTurn) + ChatStore (cap 50)
           ├─ MicrophoneMonitor
           ├─ ContextService (active-app, pastedText, clipboard-gated, screenshot note)
-          ├─ TalkSession (TalkController.selectTools → ContextService.collect → OpenRouterClient.complete)
+          ├─ TalkSession (TalkController.selectTools → ContextService.collect → token stream via OpenRouterTokenStreamer, history-aware messages)
           └─ VoiceSession (MockVoiceSession with --mock-voice, else AssemblyAISTTSession)
 ```
 
@@ -47,7 +48,9 @@ A stationary click expands the native panel before the visual capsule appears. T
 
 ### Thinking
 
-Send stops microphone capture, collapses the surface, and moves the orb to the thinking color and stronger breathing treatment. `OrbitPanelModel.submit(transcript:)` then awaits `TalkSession.answer(transcript:)` on a cancellable task; the answer lands in `resultText` (small 2-line bubble under the collapsed capsule) and the orb returns to idle. Escape cancels the task and clears the result.
+Send stops microphone capture, collapses the surface, and moves the orb to the thinking color and stronger breathing treatment. `OrbitPanelModel.submit(transcript:)` then streams `TalkSession.answerStream(transcript:history:onHint:onToken)` on a cancellable task: tool hints land in `hintText` (one line naming the fired tools), tokens accumulate in `streamText` (chat card under the collapsed capsule), and the orb returns to idle at completion. Each request carries the last 6 stored turns (`TalkController.messages`) so follow-ups resolve from history. When no key is configured the stream yields the stub reply as a single token. Escape cancels the task and clears the card; closing the card mid-stream cancels and drops late tokens.
+
+Empty input never collapses the surface: `send()` with a blank field keeps the orb expanded and opens the chat card instead, and `submit` ignores blank transcripts outright (the Enter fix).
 
 ### Mock voice
 
@@ -64,6 +67,8 @@ Pointer movement takes precedence over activation. A small drag threshold preven
 - `VoiceSession` (real: `AssemblyAISTTSession`; mock: `MockVoiceSession`) delivers final transcripts into `submit(transcript:)`; the view never sees provider callbacks.
 - `TalkController.selectTools(transcript:hasPaste:clipboardAllowed:)` is the only place that decides which `ContextTool`s fire: screen words → `.screenshot` + `.activeAppWindow`; non-empty paste → `.pastedText`; explicit opt-in → `.clipboard`. Nothing else can pull context.
 - `ContextService.collect(tools:)` enforces the gates: clipboard reads only when `clipboardAllowed`, screenshot capture only appends a `screenshot-requested` note (async `captureScreenshot()` fills `screenshotPNG` separately), empty tools yield an empty bundle.
+- Streaming runs through `TokenStreamer` (`OpenRouterTokenStreamer` live SSE via `StreamParse.tokenDeltas`, `StubTokenStreamer` in tests). `TalkController.messages(transcript:context:history:)` builds the prompt from the collected bundle plus the trailing history turns; `hintStrings(for:)` is the single source of the progress line.
+- `ChatStore` (behind the `ChatStoring` persistence seam) keeps the newest 50 turns in `turns` order; `submit` appends `ChatTurn(transcript:reply:tools:)` after the token tasks flush, guarded so cancelled/closed streams never record. `openHistory()` / `closeChat()` own the popout flags; reread selection is read-only.
 - `OpenRouterClient.complete(transcript:context:)` builds the prompt only from the collected bundle (front-app name, pasted text, clipboard, screenshot flag) and falls back to the stub reply when no key is configured. API keys never appear in logs, replies, or diffs.
 - Long-running work should have task IDs, parent/child relationships, cancellation, and observable progress from the beginning. (Today: the answer `Task` is cancellable on Escape/activate; deeper task tracking is still owed.)
 
@@ -79,7 +84,7 @@ swift run Orbit
 swift run Orbit -- --mock-voice   # text inject, no mic or keys needed
 ```
 
-The first listening interaction may prompt for microphone access. The current verification baseline is a successful `swift build`, 21/21 `swift test`, a clean `git diff --check`, `.env.local` untracked, and manual validation of click, drag, hover, Escape, Return, and relaunch-position behavior on macOS. Full GUI manual checklist with `--mock-voice` remains owed in a headed session (Task 7 recorded it N/A-headless with build/test evidence).
+The first listening interaction may prompt for microphone access. The current verification baseline is a successful `swift build`, 39/39 `swift test`, a clean `git diff --check`, `.env.local` untracked, plus the Task 3 live E2E matrix (streaming multi-token replies, history memory probes, screen/app tools with hint, clipboard-denied no-leak, denied-screen graceful completion, empty-Enter stays open, long-reply completion, store-level reread; mic round-trip headed-only) with stub-mode parity via the nil-key tests. Full GUI manual checklist with `--mock-voice` remains owed in a headed session (Task 7 recorded it N/A-headless with build/test evidence).
 
 ## Next vertical slice
 
