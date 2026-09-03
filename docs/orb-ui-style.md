@@ -51,7 +51,7 @@ One `SurfaceMode` drives view, panel size, and placement. Panel sizes (points):
 
 ## Drag feel (magnetic, springy)
 
-- Dragging is owned by the orb/voice surface, not attached dialogue or card content. The panel follows pointer deltas directly except for directional resistance within 24 pt of the nearest edge; pulling away remains 1:1.
+- Dragging is owned by the orb/voice surface, not attached dialogue or card content. It uses absolute screen mouse coordinates plus the initial grab offset, so moving the panel cannot make the gesture drift away from the cursor.
 - Release velocity projects for 0.16 s and is capped to 180 pt before the surface glides to the nearest screen edge with a 12 pt margin via a ~0.35 s ease-out animation, then sticks there — never free-floating mid-screen at rest.
 - The `NSPanel` is key-capable for text input but cannot become the main window and is not natively movable. Orbit alone moves it with `setFrame`, preventing macOS edge tiling/split-screen from taking over.
 - The anchor persists only after the snap completes, so a quit mid-animation never keeps a stale pre-snap position.
@@ -72,6 +72,9 @@ One `SurfaceMode` drives view, panel size, and placement. Panel sizes (points):
 - Thinking, output, card, input, and history surfaces are opaque white with dark text, a hairline dark border, and a soft shadow. Translucent glass is reserved for the orb/voice surface.
 - Close controls use a black circular background with a white cross and remain inside or intentionally overlap their owning surface.
 - Expanding a completed output shows the current user prompt and assistant response as one dialogue turn. Earlier turns remain available below as complete prompt/response pairs; the composer is visually separate.
+- Card layout is header (orb, frozen work duration, close), chronological scrollable chat, then a composer pinned to the bottom. Each assistant response owns its adjacent copy control.
+- Work duration freezes when streaming completes; it never continues counting in a completed output/card.
+- Card close uses a short opacity transition and the native panel collapses after 100 ms, avoiding a tall intermediate exit frame.
 - Capsule copy-free rule stands; all words live in the bubble/card.
 
 ## Product behavior
