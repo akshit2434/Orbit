@@ -26,8 +26,9 @@ OrbitApp
       ├─ accessory NSPanel
       ├─ position restoration and persistence
       └─ OrbitPanelModel
-          ├─ OrbitState (+ resultText / debugText / streamText / hintText / isMockVoice)
-          ├─ chat flags (chatOpen / historyOpen / selectedTurn) + ChatStore (cap 50)
+          ├─ SurfaceMode (orb / voice / thinking / output / card / history) + OrbitState
+          ├─ debugText / streamText / hintText / workStart / isMockVoice (+ computed isExpanded / chatOpen)
+          ├─ selectedTurn + ChatStore (cap 50)
           ├─ MicrophoneMonitor
           ├─ ContextService (active-app, pastedText, clipboard-gated, screenshot note)
           ├─ TalkSession (TalkController.selectTools → ContextService.collect → token stream via OpenRouterTokenStreamer, history-aware messages)
@@ -41,6 +42,10 @@ The executable is packaged with Swift Package Manager. `Support/Info.plist` supp
 ### Idle
 
 The visible orb is 30 px inside a 56 px interaction canvas. It breathes slowly, has soft internal fluid motion, and remains draggable.
+
+### Modes
+
+One `SurfaceMode` drives the view, the panel size, and edge-aware placement (see the locked contract in [Orb UI Style](orb-ui-style.md)): orb 80×92, voice 218×76, thinking 250×80, output 250×120, card/history 320×400. Thinking shows the hint bubble left of the orb; output shows the short reply bubble (click expands to the card); card and history share the big card with the `Worked for Xs` timer, copy button, `Ask…` + mic input row, orb docked at the edge, and the session history list. The bubble/card extend toward the screen center based on the nearest edge (left/right win ties); above/below placement clamps x on-screen. Dragging moves the panel live and releases with a ~0.35 s magnetic snap to the nearest edge (12 pt margin); the anchor persists to `anchor.json` under `Application Support/com.akshit2434.orbit` only after the snap completes. Diagnostic resize logging and the retired `resultText` property are removed.
 
 ### Listening
 
@@ -68,7 +73,7 @@ Pointer movement takes precedence over activation. A small drag threshold preven
 - `TalkController.selectTools(transcript:hasPaste:clipboardAllowed:)` is the only place that decides which `ContextTool`s fire: screen words → `.screenshot` + `.activeAppWindow`; non-empty paste → `.pastedText`; explicit opt-in → `.clipboard`. Nothing else can pull context.
 - `ContextService.collect(tools:)` enforces the gates: clipboard reads only when `clipboardAllowed`, screenshot capture only appends a `screenshot-requested` note (async `captureScreenshot()` fills `screenshotPNG` separately), empty tools yield an empty bundle.
 - Streaming runs through `TokenStreamer` (`OpenRouterTokenStreamer` live SSE via `StreamParse.tokenDeltas`, `StubTokenStreamer` in tests). `TalkController.messages(transcript:context:history:)` builds the prompt from the collected bundle plus the trailing history turns; `hintStrings(for:)` is the single source of the progress line.
-- `ChatStore` (behind the `ChatStoring` persistence seam) keeps the newest 50 turns in `turns` order; `submit` appends `ChatTurn(transcript:reply:tools:)` after the token tasks flush, guarded so cancelled/closed streams never record. `openHistory()` / `closeChat()` own the popout flags; reread selection is read-only.
+- `ChatStore` (behind the `ChatStoring` persistence seam) keeps the newest 50 turns in `turns` order; `submit` appends `ChatTurn(transcript:reply:tools:)` after the token tasks flush, guarded so cancelled/closed streams never record. `openHistory()` enters history mode with no stale timer; `closeChat()` returns to the orb; reread selection is read-only.
 - `OpenRouterClient.complete(transcript:context:)` builds the prompt only from the collected bundle (front-app name, pasted text, clipboard, screenshot flag) and falls back to the stub reply when no key is configured. API keys never appear in logs, replies, or diffs.
 - Long-running work should have task IDs, parent/child relationships, cancellation, and observable progress from the beginning. (Today: the answer `Task` is cancellable on Escape/activate; deeper task tracking is still owed.)
 
@@ -84,7 +89,7 @@ swift run Orbit
 swift run Orbit -- --mock-voice   # text inject, no mic or keys needed
 ```
 
-The first listening interaction may prompt for microphone access. The current verification baseline is a successful `swift build`, 39/39 `swift test`, a clean `git diff --check`, `.env.local` untracked, plus the Task 3 live E2E matrix (streaming multi-token replies, history memory probes, screen/app tools with hint, clipboard-denied no-leak, denied-screen graceful completion, empty-Enter stays open, long-reply completion, store-level reread; mic round-trip headed-only) with stub-mode parity via the nil-key tests. Full GUI manual checklist with `--mock-voice` remains owed in a headed session (Task 7 recorded it N/A-headless with build/test evidence).
+The first listening interaction may prompt for microphone access. The current verification baseline is a successful `swift build`, 49/49 `swift test`, a clean `git diff --check`, `.env.local` untracked, plus the Task 3 live E2E matrix (streaming multi-token replies, history memory probes, screen/app tools with hint, clipboard-denied no-leak, denied-screen graceful completion, empty-Enter stays open, long-reply completion, store-level reread; mic round-trip headed-only) with stub-mode parity via the nil-key tests. Full GUI manual checklist with `--mock-voice` remains owed in a headed session (Task 7 recorded it N/A-headless with build/test evidence).
 
 ## Next vertical slice
 

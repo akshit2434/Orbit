@@ -50,6 +50,16 @@ final class ChatModelTests: XCTestCase {
         XCTAssertFalse(model.chatOpen)
         XCTAssertTrue(model.streamText.isEmpty)
     }
+    func testOpenHistoryShowsNoStaleTimer() {
+        let svc = ContextService()
+        let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))
+        let model = OrbitPanelModel(isMockVoice: true, context: svc,
+            talk: TalkSession(context: svc, client: client), voice: MockVoiceSession())
+        model.workStart = Date()
+        model.openHistory()
+        XCTAssertEqual(model.mode, .history)
+        XCTAssertNil(model.workStart)
+    }
     func testExpandToCardSetsCardMode() async {
         let svc = ContextService()
         let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))

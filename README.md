@@ -16,7 +16,13 @@ The product vision, architecture, stack, interaction model, priorities, and init
 
 ## Status
 
-Early product and architecture definition. The first native floating-shell prototype is in place; implementation will proceed in vertical slices, beginning with “See + Talk.”
+Early product and architecture definition. The native floating shell is rebuilt on a single mode enum per the hand sketch (orb → voice pill → thinking bubble → short output → big card with timer, copy, text+mic input, and docked orb); implementation proceeds in vertical slices, beginning with “See + Talk.”
+
+## Floating surface
+
+One `SurfaceMode` drives the view, panel size, and placement: orb 80×92, voice 218×76, thinking 250×80, output 250×120, card/history 320×400. The bubble/card extend toward the screen center from the nearest edge (left/right win ties; 12 pt margin), and dragging the orb snaps it magnetically to the nearest edge with a short ease-out glide.
+
+The anchor (`maxX`, `midY`) persists to `anchor.json` under `Application Support/com.akshit2434.orbit` (restored on launch when still on-screen), with `UserDefaults` as fallback. Replies carry a `Worked for Xs` timer ticking from the first streamed token plus a copy button that leaves the pasteboard untouched when the reply is empty. History is session-only (newest 50 turns) and renders inside the card.
 
 ## Run the SwiftUI prototype
 

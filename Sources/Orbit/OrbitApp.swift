@@ -7,7 +7,6 @@ final class OrbitPanelModel: ObservableObject {
     @Published var state: OrbitState = .idle
     @Published var mode: SurfaceMode = .orb
     var isExpanded: Bool { mode == .voice }
-    @Published var resultText: String?
     @Published var debugText = ""
     @Published var streamText = ""
     @Published var hintText: String?
@@ -15,7 +14,6 @@ final class OrbitPanelModel: ObservableObject {
     var chatOpen: Bool {
         mode == .thinking || mode == .output || mode == .card || mode == .history
     }
-    @Published var historyOpen = false
     @Published var selectedTurn: ChatTurn?
     let store = ChatStore()
 
@@ -66,7 +64,6 @@ final class OrbitPanelModel: ObservableObject {
 
         answerTask?.cancel()
         answerTask = nil
-        resultText = nil
         state = .listening
         mode = .voice
         workStart = nil
@@ -103,19 +100,17 @@ final class OrbitPanelModel: ObservableObject {
         answerTask = nil
         voice.stop()
         microphone.stop()
-        resultText = nil
         streamText = ""
         hintText = nil
         workStart = nil
-        historyOpen = false
         selectedTurn = nil
         state = .idle
         mode = .orb
     }
 
     func openHistory() {
-        historyOpen = true
         mode = .history
+        workStart = nil
         selectedTurn = nil
         state = .idle
     }
@@ -127,7 +122,6 @@ final class OrbitPanelModel: ObservableObject {
         hintText = nil
         workStart = nil
         mode = .orb
-        historyOpen = false
         selectedTurn = nil
         state = .idle
     }
@@ -152,13 +146,11 @@ final class OrbitPanelModel: ObservableObject {
         answerTask?.cancel()
         microphone.stop()
         voice.stop()
-        resultText = nil
         streamText = ""
         hintText = nil
         workStart = nil
         state = .thinking
         mode = .thinking
-        historyOpen = false
         selectedTurn = nil
         answerTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -295,7 +287,6 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         pendingCollapse?.cancel()
 
         let size = surfaceSize(mode)
-        NSLog("orbit: resize mode=\(mode) expanded=\(model.isExpanded) chatOpen=\(model.chatOpen) new=\(size) was=\(panel.frame)")
         let screenFrame =
             panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
         let side = expansionSide(

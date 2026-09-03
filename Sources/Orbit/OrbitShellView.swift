@@ -190,6 +190,7 @@ struct OrbitOverlayView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button {
+                    guard !model.streamText.isEmpty else { return }
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(model.streamText, forType: .string)
@@ -325,72 +326,6 @@ struct OrbitOverlayView: View {
         .animation(.smooth(duration: 0.22), value: model.isExpanded)
     }
 
-    private var historyCard: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            if let selected = model.selectedTurn {
-                Button {
-                    model.selectedTurn = nil
-                } label: {
-                    Label("Back", systemImage: "chevron.left")
-                        .font(.system(size: 10, weight: .semibold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .focusable(false)
-                .accessibilityLabel("Back to history")
-                Text(selected.transcript)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: 170, alignment: .trailing)
-                    .lineLimit(2)
-                Text(selected.reply)
-                    .font(.system(size: 10))
-                    .lineLimit(3)
-                    .truncationMode(.tail)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
-                    .frame(maxWidth: 190, alignment: .trailing)
-                    .accessibilityLabel("Past reply")
-            } else {
-                if model.store.turns.isEmpty {
-                    Text("No turns yet.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: 170, alignment: .trailing)
-                        .accessibilityLabel("Empty history")
-                } else {
-                    ScrollView {
-                        LazyVStack(alignment: .trailing, spacing: 4) {
-                            ForEach(Array(model.store.turns.enumerated()), id: \.offset) { _, turn in
-                                Button {
-                                    model.selectedTurn = turn
-                                } label: {
-                                    Text(turn.transcript)
-                                        .font(.system(size: 10))
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                        .foregroundStyle(.primary)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(.black.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                                        .frame(maxWidth: 170, alignment: .trailing)
-                                }
-                                .buttonStyle(.plain)
-                                .focusable(false)
-                                .accessibilityLabel("Reread turn")
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 110)
-                    .scrollIndicators(.hidden)
-                }
-            }
-            cardInputRow
-        }
-    }
-
     private var cardInputRow: some View {
         HStack(spacing: 6) {
             TextField("Ask…", text: $model.debugText)
@@ -412,7 +347,7 @@ struct OrbitOverlayView: View {
             .focusable(false)
             .accessibilityLabel("Voice input")
         }
-        .frame(maxWidth: 170, alignment: .trailing)
+        .frame(maxWidth: 280, alignment: .trailing)
     }
 
     private var surface: some View {
