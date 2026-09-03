@@ -6,18 +6,58 @@ import SwiftUI
 final class OrbitPanelModel: ObservableObject {
     @Published var state: OrbitState = .idle
     @Published var isExpanded = false
+    @Published var resultText: String?
+    @Published var debugText = ""
 
     let microphone = MicrophoneMonitor()
+    let context: ContextService
+    let isMockVoice: Bool
     var persistPosition: (() -> Void)?
+    private let talk: TalkSession
+    private var voice: any VoiceSession
+    private var answerTask: Task<Void, Never>?
     private var isDragging = false
     private var dragResetWorkItem: DispatchWorkItem?
+
+    init(
+        isMockVoice: Bool? = nil,
+        context: ContextService? = nil,
+        talk: TalkSession? = nil,
+        voice: (any VoiceSession)? = nil
+    ) {
+        let mockFlag = isMockVoice ?? CommandLine.arguments.contains("--mock-voice")
+        self.isMockVoice = mockFlag
+        let contextService = context ?? ContextService()
+        self.context = contextService
+        let config = EnvLoader.config(
+            processEnv: ProcessInfo.processInfo.environment,
+            fileEnv: EnvLoader.repoRootEnv()
+        )
+        self.talk = talk ?? TalkSession(context: contextService, client: OpenRouterClient(config: config))
+        if let voice {
+            self.voice = voice
+        } else if mockFlag {
+            self.voice = MockVoiceSession()
+        } else {
+            self.voice = AssemblyAISTTSession(apiKey: config.assemblyAIKey ?? "")
+        }
+        self.voice.onFinalTranscript = { [weak self] transcript in
+            Task { @MainActor [weak self] in
+                self?.submit(transcript: transcript)
+            }
+        }
+    }
 
     func activate() {
         guard !isDragging else { return }
 
+        answerTask?.cancel()
+        answerTask = nil
+        resultText = nil
         state = .listening
         isExpanded = true
         microphone.start()
+        voice.start()
     }
 
     func beganDragging() {
@@ -36,15 +76,43 @@ final class OrbitPanelModel: ObservableObject {
     }
 
     func cancel() {
+        answerTask?.cancel()
+        answerTask = nil
+        voice.stop()
         microphone.stop()
+        resultText = nil
         state = .idle
         isExpanded = false
     }
 
     func send() {
         microphone.stop()
+        voice.stop()
+        let pending = debugText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !pending.isEmpty else {
+            state = .idle
+            isExpanded = false
+            return
+        }
+        submit(transcript: pending)
+    }
+
+    func submit(transcript: String) {
+        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        answerTask?.cancel()
+        microphone.stop()
+        voice.stop()
         state = .thinking
         isExpanded = false
+        answerTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let answer = await self.talk.answer(transcript: text)
+            guard !Task.isCancelled else { return }
+            self.resultText = answer
+            self.state = .idle
+        }
     }
 }
 

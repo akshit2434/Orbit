@@ -48,12 +48,38 @@ struct OrbitOverlayView: View {
     @State private var isHovered = false
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            surface
-                .frame(
-                    width: model.isExpanded ? 190 : 56,
-                    height: model.isExpanded ? 44 : 56
-                )
+        VStack(alignment: .trailing, spacing: 2) {
+            ZStack(alignment: .trailing) {
+                surface
+                    .frame(
+                        width: model.isExpanded ? 190 : 56,
+                        height: model.isExpanded ? 44 : 56
+                    )
+            }
+
+            if !model.isExpanded, let result = model.resultText, !result.isEmpty {
+                Text(result)
+                    .font(.system(size: 10))
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
+                    .frame(maxWidth: 190, alignment: .trailing)
+                    .accessibilityLabel("Orbit reply")
+            }
+
+            if model.isMockVoice, model.isExpanded {
+                TextField("mock transcript", text: $model.debugText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11))
+                    .frame(width: 190)
+                    .onSubmit {
+                        model.send()
+                    }
+                    .accessibilityLabel("Mock transcript inject")
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .padding(.trailing, 12)
