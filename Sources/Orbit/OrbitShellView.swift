@@ -201,24 +201,30 @@ struct OrbitOverlayView: View {
                         .frame(maxWidth: 170, alignment: .trailing)
                         .accessibilityLabel("Empty history")
                 } else {
-                    ForEach(Array(model.store.turns.enumerated()), id: \.offset) { _, turn in
-                        Button {
-                            model.selectedTurn = turn
-                        } label: {
-                            Text(turn.transcript)
-                                .font(.system(size: 10))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .foregroundStyle(.primary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.black.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                                .frame(maxWidth: 170, alignment: .trailing)
+                    ScrollView {
+                        LazyVStack(alignment: .trailing, spacing: 4) {
+                            ForEach(Array(model.store.turns.enumerated()), id: \.offset) { _, turn in
+                                Button {
+                                    model.selectedTurn = turn
+                                } label: {
+                                    Text(turn.transcript)
+                                        .font(.system(size: 10))
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        .foregroundStyle(.primary)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(.black.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                                        .frame(maxWidth: 170, alignment: .trailing)
+                                }
+                                .buttonStyle(.plain)
+                                .focusable(false)
+                                .accessibilityLabel("Reread turn")
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .focusable(false)
-                        .accessibilityLabel("Reread turn")
                     }
+                    .frame(maxHeight: 110)
+                    .scrollIndicators(.hidden)
                 }
             }
             cardInputRow

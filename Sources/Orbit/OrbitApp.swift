@@ -182,6 +182,14 @@ private final class OrbitPanel: NSPanel {
     override var canBecomeMain: Bool { true }
 }
 
+// Pure panel-sizing rule: the chat card (~190pt content + 20pt close-cross
+// pad + 12pt root pad) must never render inside the 80pt collapsed frame.
+func orbitPanelSize(expanded: Bool, chatOpen: Bool) -> NSSize {
+    if expanded { return NSSize(width: 218, height: 76) }
+    if chatOpen { return NSSize(width: 234, height: 168) }
+    return NSSize(width: 80, height: 92)
+}
+
 @MainActor
 final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
     private enum PositionKey {
@@ -222,8 +230,15 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
 
         model.$isExpanded
             .removeDuplicates()
-            .sink { [weak self] expanded in
-                self?.resizePanel(expanded: expanded)
+            .sink { [weak self] _ in
+                self?.resizePanelForModel()
+            }
+            .store(in: &cancellables)
+
+        model.$chatOpen
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                self?.resizePanelForModel()
             }
             .store(in: &cancellables)
 
@@ -236,7 +251,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func positionPanel() {
-        let size = panelSize(expanded: false)
+        let size = panelSize(expanded: false, chatOpen: false)
         guard let panel else { return }
 
         let origin: NSPoint
@@ -256,12 +271,16 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         persistPanelAnchor()
     }
 
-    private func resizePanel(expanded: Bool) {
+    private func resizePanelForModel() {
+        resizePanel(expanded: model.isExpanded, chatOpen: model.chatOpen)
+    }
+
+    private func resizePanel(expanded: Bool, chatOpen: Bool) {
         guard let panel else { return }
 
         pendingCollapse?.cancel()
 
-        let size = panelSize(expanded: expanded)
+        let size = panelSize(expanded: expanded, chatOpen: chatOpen)
         let maxX = panel.frame.maxX
         let midY = panel.frame.midY
         let frame = NSRect(
@@ -271,7 +290,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             height: size.height
         )
 
-        if expanded {
+        if expanded || chatOpen {
             panel.setFrame(frame, display: true)
             panel.makeKeyAndOrderFront(nil)
             return
@@ -284,8 +303,8 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: collapse)
     }
 
-    private func panelSize(expanded: Bool) -> NSSize {
-        expanded ? NSSize(width: 218, height: 76) : NSSize(width: 80, height: 92)
+    private func panelSize(expanded: Bool, chatOpen: Bool) -> NSSize {
+        orbitPanelSize(expanded: expanded, chatOpen: chatOpen)
     }
 
     private func preferredScreen() -> NSScreen? {
