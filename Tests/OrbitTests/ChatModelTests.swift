@@ -90,6 +90,8 @@ final class ChatModelTests: XCTestCase {
         model.submit(transcript: "ping")
         try? await Task.sleep(nanoseconds: 500_000_000)
         XCTAssertTrue(model.streamText.contains("ping"))
+        XCTAssertEqual(model.currentTranscript, "ping")
+        XCTAssertNotNil(model.completedWorkDuration)
         XCTAssertEqual(model.state, .idle)
         XCTAssertTrue(model.chatOpen)
     }

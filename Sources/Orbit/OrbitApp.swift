@@ -10,8 +10,10 @@ final class OrbitPanelModel: ObservableObject {
     @Published var mockText = ""
     @Published var askText = ""
     @Published var streamText = ""
+    @Published var currentTranscript = ""
     @Published var hintText: String?
     @Published var workStart: Date?
+    @Published var completedWorkDuration: TimeInterval?
     @Published var side: ExpansionSide = .left
     var chatOpen: Bool {
         mode == .thinking || mode == .output || mode == .card || mode == .history
@@ -24,6 +26,7 @@ final class OrbitPanelModel: ObservableObject {
     let isMockVoice: Bool
     var persistPosition: (() -> Void)?
     var movePanelBy: ((CGSize) -> Void)?
+    var movePanelToCursor: ((NSPoint) -> Void)?
     var snapPanel: (() -> Void)?
     var reassertPanel: (() -> Void)?
     var dragSamples: [DragSample] = []
@@ -102,6 +105,16 @@ final class OrbitPanelModel: ObservableObject {
         drag(to: translation)
     }
 
+    func drag(cursor: NSPoint, at timestamp: TimeInterval) {
+        dragResetWorkItem?.cancel()
+        reassertWorkItem?.cancel()
+        reassertWorkItem = nil
+        isDragging = true
+        dragSamples.append(DragSample(point: cursor, at: timestamp))
+        if dragSamples.count > 10 { dragSamples.removeFirst(dragSamples.count - 10) }
+        movePanelToCursor?(cursor)
+    }
+
     func endDrag(velocity: CGVector = .zero) {
         lastDragTranslation = nil
         let v: CGVector = velocity == .zero ? flingVelocity(dragSamples) : velocity
@@ -130,6 +143,11 @@ final class OrbitPanelModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: reassert)
     }
 
+    func endCursorDrag() {
+        let screenVelocity = flingVelocity(dragSamples)
+        endDrag(velocity: CGVector(dx: screenVelocity.dx, dy: -screenVelocity.dy))
+    }
+
     func cancel() {
         answerTask?.cancel()
         answerTask = nil
@@ -138,6 +156,8 @@ final class OrbitPanelModel: ObservableObject {
         streamText = ""
         hintText = nil
         workStart = nil
+        completedWorkDuration = nil
+        currentTranscript = ""
         selectedTurn = nil
         state = .idle
         mode = .orb
@@ -146,6 +166,7 @@ final class OrbitPanelModel: ObservableObject {
     func openHistory() {
         mode = .history
         workStart = nil
+        completedWorkDuration = nil
         selectedTurn = nil
         state = .idle
     }
@@ -156,6 +177,8 @@ final class OrbitPanelModel: ObservableObject {
         streamText = ""
         hintText = nil
         workStart = nil
+        completedWorkDuration = nil
+        currentTranscript = ""
         mode = .orb
         selectedTurn = nil
         state = .idle
@@ -188,6 +211,8 @@ final class OrbitPanelModel: ObservableObject {
         streamText = ""
         hintText = nil
         workStart = nil
+        completedWorkDuration = nil
+        currentTranscript = text
         state = .thinking
         mode = .thinking
         selectedTurn = nil
@@ -234,6 +259,7 @@ final class OrbitPanelModel: ObservableObject {
                 self.workStart = Date()
             }
             self.hintText = nil
+            self.completedWorkDuration = self.workStart.map { Date().timeIntervalSince($0) } ?? 0
             let fired = TalkController.selectTools(
                 transcript: text,
                 hasPaste: !self.context.pastedText.isEmpty,
@@ -264,6 +290,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
     private var panel: OrbitPanel?
     private var cancellables = Set<AnyCancellable>()
     private var pendingCollapse: DispatchWorkItem?
+    private var pointerGrabOffset: NSPoint?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -296,6 +323,9 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         }
         model.movePanelBy = { [weak self] delta in
             self?.movePanel(by: delta)
+        }
+        model.movePanelToCursor = { [weak self] point in
+            self?.movePanel(toCursor: point)
         }
         model.snapPanel = { [weak self] in
             self?.snapPanelToEdge()
@@ -369,7 +399,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             panel?.setFrame(frame, display: true)
         }
         pendingCollapse = collapse
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: collapse)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10, execute: collapse)
     }
 
     private func preferredScreen() -> NSScreen? {
@@ -433,8 +463,24 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrame(frame, display: true)
     }
 
+    private func movePanel(toCursor cursor: NSPoint) {
+        guard let panel else { return }
+        if pointerGrabOffset == nil {
+            pointerGrabOffset = NSPoint(
+                x: cursor.x - panel.frame.origin.x,
+                y: cursor.y - panel.frame.origin.y)
+        }
+        guard let offset = pointerGrabOffset else { return }
+        let screenFrame = NSScreen.screens.first(where: { $0.frame.contains(cursor) })?.visibleFrame
+            ?? panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
+        var frame = panel.frame
+        frame.origin = NSPoint(x: cursor.x - offset.x, y: cursor.y - offset.y)
+        panel.setFrame(clampedDragFrame(frame, screen: screenFrame), display: true)
+    }
+
     private func snapPanelToEdge() {
         guard let panel else { return }
+        pointerGrabOffset = nil
         let screenFrame =
             panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
         let target = snapTarget(current: panel.frame, screen: screenFrame)

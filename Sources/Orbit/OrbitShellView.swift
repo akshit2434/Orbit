@@ -111,7 +111,7 @@ struct OrbitOverlayView: View {
                 .transition(.blurReplace.combined(with: .opacity))
             case .card, .history:
                 cardView
-                    .transition(.blurReplace.combined(with: .opacity))
+                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
@@ -203,27 +203,14 @@ struct OrbitOverlayView: View {
     }
 
     private var cardView: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
+                surface
+                    .frame(width: 40, height: 40)
                 timerLabel
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button {
-                    guard !model.streamText.isEmpty else { return }
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(model.streamText, forType: .string)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 10, weight: .regular))
-                        .frame(width: 22, height: 22)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .focusable(false)
-                .focusEffectDisabled()
-                .accessibilityLabel("Copy reply")
                 Button {
                     model.closeChat()
                 } label: {
@@ -240,70 +227,39 @@ struct OrbitOverlayView: View {
                 .accessibilityLabel("Close chat")
             }
             ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
-                    if let current = model.store.turns.first {
-                        dialogueTurn(current, fullReply: true)
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    if let selected = model.selectedTurn {
+                        Button {
+                            model.selectedTurn = nil
+                        } label: {
+                            Label("All chats", systemImage: "chevron.left")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        dialogueTurn(selected, fullReply: true)
+                    } else if model.store.turns.isEmpty {
+                        dialogueStrings(
+                            transcript: model.currentTranscript,
+                            reply: model.streamText.isEmpty
+                                ? (model.hintText ?? "Thinking…") : model.streamText)
                     } else {
-                        Text(model.streamText.isEmpty ? (model.hintText ?? "Thinking…") : model.streamText)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityLabel("Orbit reply")
-                    }
-                }
-            }
-            .frame(maxHeight: 170)
-            .scrollIndicators(.hidden)
-            cardInputRow
-                .frame(maxWidth: 280, alignment: .trailing)
-            if let selected = model.selectedTurn {
-                Button {
-                    model.selectedTurn = nil
-                } label: {
-                    Label("Back", systemImage: "chevron.left")
-                        .font(.system(size: 10, weight: .semibold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .focusable(false)
-                .focusEffectDisabled()
-                .accessibilityLabel("Back to history")
-                dialogueTurn(selected, fullReply: false)
-            } else if !model.store.turns.isEmpty {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 4) {
-                        ForEach(Array(model.store.turns.dropFirst())) { turn in
-                            Button {
-                                model.selectedTurn = turn
-                            } label: {
-                                Text(turn.transcript)
-                                    .font(.system(size: 10))
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .foregroundStyle(.primary)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                                    .frame(maxWidth: 280, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
-                            .focusable(false)
-                            .focusEffectDisabled()
-                            .accessibilityLabel("Reread turn")
+                        ForEach(Array(model.store.turns.reversed())) { turn in
+                            dialogueTurn(turn, fullReply: true)
+                                .contentShape(Rectangle())
+                                .onTapGesture { model.selectedTurn = turn }
                         }
                     }
                 }
-                .frame(maxHeight: 90)
-                .scrollIndicators(.hidden)
             }
-            HStack {
-                Spacer()
-                surface
-                    .frame(width: 56, height: 56)
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .scrollIndicators(.hidden)
+            Divider()
+            cardInputRow
+                .frame(maxWidth: 280, alignment: .trailing)
         }
         .padding(12)
-        .frame(width: 296, alignment: .leading)
+        .frame(width: 296, height: 376, alignment: .leading)
         .background(.white, in: RoundedRectangle(cornerRadius: 14))
         .overlay {
             RoundedRectangle(cornerRadius: 14)
@@ -313,24 +269,52 @@ struct OrbitOverlayView: View {
     }
 
     private func dialogueTurn(_ turn: ChatTurn, fullReply: Bool) -> some View {
+        dialogueStrings(transcript: turn.transcript, reply: turn.reply, fullReply: fullReply)
+    }
+
+    private func dialogueStrings(
+        transcript: String, reply: String, fullReply: Bool = true
+    ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(turn.transcript)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            Text(turn.reply)
+            if !transcript.isEmpty {
+                Text(transcript)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+                    .frame(maxWidth: 230, alignment: .trailing)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            Text(reply)
                 .font(.system(size: 11))
                 .lineLimit(fullReply ? nil : 5)
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                guard !reply.isEmpty else { return }
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(reply, forType: .string)
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 10))
+                    .frame(width: 22, height: 22)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .focusable(false)
+            .focusEffectDisabled()
+            .accessibilityLabel("Copy reply")
         }
-        .padding(8)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var timerLabel: some View {
         Group {
-            if let start = model.workStart {
+            if let duration = model.completedWorkDuration {
+                Text(workedString(elapsed: duration))
+            } else if let start = model.workStart {
                 TimelineView(.periodic(from: .now, by: 1.0)) { context in
                     Text(workedString(elapsed: context.date.timeIntervalSince(start)))
                 }
@@ -434,10 +418,12 @@ struct OrbitOverlayView: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 2)
                 .onChanged { value in
-                    model.drag(to: value.translation, at: value.time.timeIntervalSinceReferenceDate)
+                    model.drag(
+                        cursor: NSEvent.mouseLocation,
+                        at: value.time.timeIntervalSinceReferenceDate)
                 }
                 .onEnded { _ in
-                    model.endDrag(velocity: flingVelocity(model.dragSamples))
+                    model.endCursorDrag()
                 }
         )
     }
