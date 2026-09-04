@@ -3,28 +3,21 @@ import XCTest
 
 @MainActor
 final class ChatModelTests: XCTestCase {
-    func testHistoryHoverSourcesDoNotHideEachOther() async {
+    func testHistoryHoverPermissionFollowsModeAndDragging() {
         let model = OrbitPanelModel(isMockVoice: true, voice: MockVoiceSession())
-        model.setHistoryHover(.orb, true)
-        model.setHistoryHover(.button, false)
-        try? await Task.sleep(for: .milliseconds(550))
-        XCTAssertTrue(model.historyVisible)
-        model.setHistoryHover(.orb, false)
-        model.setHistoryHover(.button, true)
-        try? await Task.sleep(for: .milliseconds(550))
-        XCTAssertTrue(model.historyVisible)
-        model.setHistoryHover(.button, false)
-        try? await Task.sleep(for: .milliseconds(550))
-        XCTAssertFalse(model.historyVisible)
+        XCTAssertTrue(model.permitsHistoryHover)
+        model.mode = .voice
+        XCTAssertFalse(model.permitsHistoryHover)
+        model.mode = .orb
+        model.drag(cursor: .zero, at: 1)
+        XCTAssertFalse(model.permitsHistoryHover)
     }
 
     func testDraggingClearsAndSuppressesHistoryHover() {
         let model = OrbitPanelModel(isMockVoice: true, voice: MockVoiceSession())
-        model.setHistoryHover(.orb, true)
+        model.historyVisible = true
         XCTAssertTrue(model.historyVisible)
         model.drag(cursor: .zero, at: 1)
-        XCTAssertFalse(model.historyVisible)
-        model.setHistoryHover(.button, true)
         XCTAssertFalse(model.historyVisible)
         model.endCursorDrag()
     }

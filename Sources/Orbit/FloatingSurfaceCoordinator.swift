@@ -3,35 +3,7 @@ import Combine
 import SwiftUI
 
 private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
-    var hoverChanged: ((Bool) -> Void)? {
-        didSet { updateTrackingAreas() }
-    }
-    private var hoverTrackingArea: NSTrackingArea?
-
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
-        hoverTrackingArea = nil
-        guard hoverChanged != nil else { return }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil)
-        addTrackingArea(area)
-        hoverTrackingArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        hoverChanged?(true)
-    }
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        hoverChanged?(false)
-    }
 }
 
 @MainActor
@@ -48,6 +20,8 @@ final class FloatingSurfaceCoordinator {
     private var cancellables = Set<AnyCancellable>()
     private var pointerGrabOffset: NSPoint?
     private var snapFrame: NSRect?
+    private var hoverTimer: Timer?
+    private var lastHistoryHoverAt: Date?
 
     init(model: OrbitPanelModel) {
         self.model = model
@@ -58,17 +32,11 @@ final class FloatingSurfaceCoordinator {
         let orbView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .orb))
         orbPanel.contentView = orbView
-        orbView.hoverChanged = { [weak model] hovering in
-            model?.setHistoryHover(.orb, hovering)
-        }
         surfacePanel.contentView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .attached))
         let historyView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .history))
         historyPanel.contentView = historyView
-        historyView.hoverChanged = { [weak model] hovering in
-            model?.setHistoryHover(.button, hovering)
-        }
 
         wireModel()
         restoreOrbPosition()
@@ -77,6 +45,7 @@ final class FloatingSurfaceCoordinator {
         orbPanel.orderFrontRegardless()
         historyPanel.orderOut(nil)
         updateAttachedSurface(for: model.mode)
+        startHoverTracking()
     }
 
     private static func makePanel(size: NSSize, keyCapable: Bool = true) -> OrbitPanel {
@@ -130,6 +99,41 @@ final class FloatingSurfaceCoordinator {
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .sink { [weak self] _ in self?.screenConfigurationChanged() }
             .store(in: &cancellables)
+    }
+
+    private func startHoverTracking() {
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.reconcileHistoryHover() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        hoverTimer = timer
+    }
+
+    private func reconcileHistoryHover(now: Date = Date()) {
+        guard model.permitsHistoryHover else {
+            lastHistoryHoverAt = nil
+            model.hideHistoryButton()
+            return
+        }
+
+        let pointer = NSEvent.mouseLocation
+        let orbHitFrame = orbPanel.frame.insetBy(dx: 6, dy: 6)
+        let screen = preferredScreen(for: pointer)?.visibleFrame ?? orbPanel.frame
+        let anchor = OrbAnchor(center: NSPoint(x: orbPanel.frame.midX, y: orbPanel.frame.midY))
+        let side = expansionSide(anchorX: anchor.center.x, anchorY: anchor.center.y, screen: screen)
+        let historyHitFrame = historyButtonFrame(anchor: anchor, side: side, screen: screen)
+            .insetBy(dx: -3, dy: -3)
+        let isHovering = orbHitFrame.contains(pointer)
+            || (model.historyVisible && historyHitFrame.contains(pointer))
+
+        if isHovering {
+            lastHistoryHoverAt = now
+            if !model.historyVisible { model.historyVisible = true }
+        } else if let lastHistoryHoverAt,
+                  now.timeIntervalSince(lastHistoryHoverAt) >= 0.5 {
+            self.lastHistoryHoverAt = nil
+            model.historyVisible = false
+        }
     }
 
     private func preferredScreen(for point: NSPoint? = nil) -> NSScreen? {
