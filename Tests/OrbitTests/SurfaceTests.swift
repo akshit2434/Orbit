@@ -2,8 +2,27 @@ import XCTest
 @testable import Orbit
 
 final class SurfaceTests: XCTestCase {
+    func testHistoryButtonAppearsInsideScreenOppositeEveryEdge() {
+        let screen = CGRect(x: 100, y: 80, width: 1200, height: 800)
+        let cases: [(CGPoint, ExpansionSide)] = [
+            (CGPoint(x: screen.minX + 28, y: screen.midY), .right),
+            (CGPoint(x: screen.maxX - 28, y: screen.midY), .left),
+            (CGPoint(x: screen.midX, y: screen.maxY - 28), .below),
+            (CGPoint(x: screen.midX, y: screen.minY + 28), .above),
+        ]
+        for (center, side) in cases {
+            let frame = historyButtonFrame(anchor: OrbAnchor(center: center), side: side, screen: screen)
+            XCTAssertTrue(screen.contains(frame))
+            switch side {
+            case .left: XCTAssertLessThan(frame.maxX, center.x)
+            case .right: XCTAssertGreaterThan(frame.minX, center.x)
+            case .above: XCTAssertGreaterThan(frame.minY, center.y)
+            case .below: XCTAssertLessThan(frame.maxY, center.y)
+            }
+        }
+    }
     func testSizeTable() {
-        XCTAssertEqual(surfaceSize(.orb), NSSize(width: 80, height: 92))
+        XCTAssertEqual(surfaceSize(.orb), NSSize(width: 56, height: 56))
         XCTAssertEqual(surfaceSize(.voice), NSSize(width: 218, height: 76))
         XCTAssertEqual(surfaceSize(.thinking), NSSize(width: 250, height: 80))
         XCTAssertEqual(surfaceSize(.output), NSSize(width: 250, height: 120))
@@ -118,8 +137,8 @@ final class SurfaceTests: XCTestCase {
         let anchor = PanelAnchor(maxX: 92, midY: 400)
         let size = NSSize(width: 320, height: 400)
         let p = placementOrigin(anchor: anchor, size: size, side: .right, screen: screen)
-        // Orb 80 wide: orbLeft = 92 - 80 = 12, panel extends right toward center.
-        XCTAssertEqual(p.x, 12, accuracy: 0.5)
+        // Orb 56 wide: orbLeft = 92 - 56 = 36, panel extends right toward center.
+        XCTAssertEqual(p.x, 36, accuracy: 0.5)
         XCTAssertEqual(p.y, 200, accuracy: 0.5)
     }
     func testBubbleLeadingOnlyOnLeft() {

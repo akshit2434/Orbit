@@ -28,7 +28,7 @@ OrbitApp
       └─ OrbitPanelModel
           ├─ SurfaceMode (orb / voice / thinking / output / card / history) + OrbitState
           ├─ mockText / askText / streamText / hintText / workStart / isMockVoice (+ computed isExpanded / chatOpen)
-          ├─ selectedTurn + ChatStore (selectable in-memory threads, cap 50 turns each)
+          ├─ selectedTurn + ChatStore (persistent local threads, uncapped turns + attachment files)
           ├─ MicrophoneMonitor
           ├─ ContextService (active-app, pastedText, clipboard-gated, permission-aware screenshot)
           ├─ TalkSession (TalkController.selectTools → ContextService.collectForRequest → token stream via OpenRouterTokenStreamer, history-aware messages)
@@ -45,7 +45,7 @@ The visible orb is 30 px inside a 56 px interaction canvas. It breathes slowly, 
 
 ### Modes
 
-One `SurfaceMode` drives attached content while `FloatingSurfaceCoordinator` owns two windows. The orb panel remains 80×92 in every mode and exclusively owns drag/snap persistence. Voice, thinking, output, card, and history render in a separate panel placed from the stable orb anchor by `attachedSurfacePlacement`; preferred-side fallback and final visible-frame containment prevent overflow without moving the orb. The attached hosting view accepts first-mouse events so output and voice controls work on the first click.
+One `SurfaceMode` drives attached content while `FloatingSurfaceCoordinator` owns three windows. The 56×56 orb panel exclusively owns drag/snap persistence. Voice, thinking, output, card, and history render in a separate panel placed from the stable visual-orb footprint by `attachedSurfacePlacement`. The hover history button has its own 36×36 panel and appears on the available side opposite the nearest edge, so it never relies on an out-of-window offset or clips. Preferred-side fallback and final visible-frame containment prevent overflow without moving the orb. Interactive hosting views accept first-mouse events.
 
 ### Listening
 
@@ -74,10 +74,11 @@ Thinking and output bubbles sit 4 pt from the orb. Non-orb dialogue surfaces are
 `OrbitPanelModel` owns only shell state and user intent for this prototype. Services stay separate:
 
 - `VoiceSession` (real: `AssemblyAISTTSession`; mock: `MockVoiceSession`) delivers final transcripts into `submit(transcript:)`; the view never sees provider callbacks.
-- `TalkController.selectTools(transcript:hasPaste:clipboardAllowed:)` is the only place that decides which `ContextTool`s fire: screen words → `.screenshot` + `.activeAppWindow`; non-empty paste → `.pastedText`; explicit opt-in → `.clipboard`. Nothing else can pull context.
-- `ContextService.collectForRequest(tools:)` enforces the gates: clipboard reads only when `clipboardAllowed`; screenshot capture runs only when `.screenshot` was selected. It checks Screen Recording permission, captures the display under the pointer while excluding Orbit's own windows, and records `captured`, `permissionDenied`, or `unavailable` separately. Empty tools never invoke capture.
-- Streaming runs through `TokenStreamer` (`OpenRouterTokenStreamer` live SSE via `StreamParse.tokenDeltas`, `StubTokenStreamer` in tests). `TalkController.messages(transcript:context:history:)` builds the prompt from the collected bundle plus the trailing history turns; `hintStrings(for:)` is the single source of the progress line. A captured PNG is encoded as an OpenRouter `image_url` data URL alongside the final user text for both streaming and non-streaming requests.
-- `ChatStore` (behind the `ChatStoring` persistence seam) owns selectable in-memory `ChatThread`s and keeps the newest 50 turns per thread. The selected thread receives orb and card prompts until the user creates or selects another thread. `submit` captures that thread ID, passes its chronological recent history into `TalkSession`, and appends completion back to the originating thread. `openHistory()` enters history mode with no stale timer; `closeChat()` only collapses and intentionally leaves active work running; explicit cancel still cancels.
+- With an OpenRouter key, `OpenRouterToolPlanner` gives the model native `capture_screen`, `read_clipboard`, and (when available) `load_screenshot` tools. Production tool choice is model-directed; the legacy phrase selector is used only by nil-key test mode.
+- `ContextService.collectForRequest(tools:)` executes only selected tools. Clipboard content is read once when the clipboard tool runs. Screen capture checks permission, captures the pointer's display while excluding Orbit's windows, and reports `captured`, `permissionDenied`, or `unavailable` distinctly.
+- Streaming runs through typed `StreamEvent`s. Transport errors cannot masquerade as assistant tokens. `TalkController.messages(transcript:context:history:)` sends every completed turn and excludes failed, cancelled, interrupted, and generating turns. Tool-selected PNG data is encoded as an OpenRouter `image_url` data URL.
+- `ChatStore` persists selectable local `ChatThread`s, selected-thread identity, uncapped turns, outcomes, duration, and tool metadata atomically. PNG attachments live beside the JSON store and are deleted when their turn is removed. A restored `.generating` turn becomes `.interrupted`. This storage seam is intended for later frequent cloud synchronization.
+- A thread accepts only one generation at a time. Submission immediately creates a `.generating` turn and starts its timer; collapse and orb activation preserve work, while Stop records `.cancelled`. Failed/cancelled/interrupted turns provide Retry/Remove and never enter model memory.
 - All panel frame writes pass through `containedPanelFrame`, including launch restoration, mode resize, live drag, release projection, edge snap, and delayed reassert. Tests cover every surface mode at all four off-screen corner requests on a non-zero-origin display.
 - `OpenRouterClient.complete(transcript:context:)` builds the prompt only from the collected bundle (front-app name, pasted text, clipboard, screenshot flag) and falls back to the stub reply when no key is configured. API keys never appear in logs, replies, or diffs.
 - Long-running work should have task IDs, parent/child relationships, cancellation, and observable progress from the beginning. (Today: the answer `Task` is cancellable on Escape/activate; deeper task tracking is still owed.)
@@ -98,8 +99,8 @@ The first listening interaction may prompt for microphone access; the first expl
 
 ## Next vertical slice
 
-The two-panel floating-surface refactor is implemented; the original implementation plan remains at [Two-panel floating surface refactor](superpowers/plans/2026-09-04-two-panel-surface-refactor.md).
+The floating-surface refactor is implemented; the original two-panel implementation plan remains as historical context at [Two-panel floating surface refactor](superpowers/plans/2026-09-04-two-panel-surface-refactor.md). The history control subsequently moved into a third dedicated panel to support unclipped edge-aware placement.
 
 Live microphone audio is captured as WAV and sent through `AssemblyAISTTSession.transcribeWAV`; the resulting transcript enters the same selected-thread streaming path as typed input. Mock voice and nil-key fallbacks remain available for deterministic local testing.
 
-The next meaningful “See” enhancement is browser/active-window titles and optional region/window targeting; connected accounts and Solari execution remain future internal tools behind the same gating pattern.
+The next storage enhancement is periodic history/image compression before cloud sync. Browser/active-window titles, connected accounts, and Solari execution remain future tools behind the same model-directed boundary.

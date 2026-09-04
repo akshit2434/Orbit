@@ -20,6 +20,8 @@ final class OrbitPanelModel: ObservableObject {
     }
     @Published var selectedTurn: ChatTurn?
     @Published private(set) var isGenerating = false
+    @Published var contextToast: String?
+    @Published var historyVisible = false
     let store: ChatStore
 
     let microphone = MicrophoneMonitor()
@@ -38,6 +40,8 @@ final class OrbitPanelModel: ObservableObject {
     private var answerTask: Task<Void, Never>?
     private var isDragging = false
     private var dragResetWorkItem: DispatchWorkItem?
+    private var toastTask: Task<Void, Never>?
+    private var historyHideTask: Task<Void, Never>?
 
     init(
         isMockVoice: Bool? = nil,
@@ -171,6 +175,7 @@ final class OrbitPanelModel: ObservableObject {
     }
 
     func openHistory() {
+        historyVisible = false
         mode = .history
         workStart = nil
         completedWorkDuration = nil
@@ -181,6 +186,19 @@ final class OrbitPanelModel: ObservableObject {
     func closeChat() {
         mode = .orb
         selectedTurn = nil
+    }
+
+    func setHistoryHover(_ hovering: Bool) {
+        historyHideTask?.cancel()
+        if hovering {
+            historyVisible = mode == .orb
+        } else {
+            historyHideTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                self?.historyVisible = false
+            }
+        }
     }
 
     func newThread() {
@@ -314,6 +332,10 @@ final class OrbitPanelModel: ObservableObject {
                 },
                 onTools: { bundle, calls in
                     toolAccumulator.set(bundle: bundle, calls: calls)
+                    guard !calls.isEmpty else { return }
+                    Task { @MainActor [weak self] in
+                        self?.showToolToast(for: calls)
+                    }
                 },
                 onFailure: { message in
                     accumulator.fail(message)
@@ -361,12 +383,10 @@ final class OrbitPanelModel: ObservableObject {
                         toolResults.append(ToolResult(kind: .screenshot, status: .error, text: message))
                     }
                 case "load_screenshot":
-                    let path = call.arguments["attachment_path"]
                     toolResults.append(ToolResult(
                         kind: .screenshot,
                         status: bundle.screenshotPNG == nil ? .error : .success,
-                        text: bundle.screenshotPNG == nil ? "The saved screenshot could not be loaded." : "Saved screenshot loaded successfully.",
-                        attachmentPath: path))
+                        text: bundle.screenshotPNG == nil ? "The saved screenshot could not be loaded." : "Saved screenshot loaded successfully."))
                 case "read_clipboard", "clipboard":
                     toolResults.append(ToolResult(
                         kind: .clipboard, status: .success,
@@ -419,6 +439,25 @@ final class OrbitPanelModel: ObservableObject {
         guard !isGenerating || turn.status != .generating else { return }
         store.removeTurn(id: turn.id, from: store.selectedThreadID)
         if selectedTurn?.id == turn.id { selectedTurn = nil }
+    }
+
+    private func showToolToast(for calls: [PlannedToolCall]) {
+        let labels = calls.compactMap { call in
+            switch call.name {
+            case "capture_screen": "Screen captured"
+            case "load_screenshot": "Screenshot loaded"
+            case "read_clipboard", "clipboard": "Clipboard read"
+            default: nil
+            }
+        }
+        guard !labels.isEmpty else { return }
+        toastTask?.cancel()
+        contextToast = labels.joined(separator: " · ")
+        toastTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.6))
+            guard !Task.isCancelled else { return }
+            self?.contextToast = nil
+        }
     }
 }
 

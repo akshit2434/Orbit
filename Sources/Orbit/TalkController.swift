@@ -76,7 +76,14 @@ public enum TalkController {
         var msgs = [["role": "system", "content": OpenRouterClient.systemPrompt]]
         for turn in history where turn.status == .completed {
             msgs.append(["role": "user", "content": turn.transcript])
-            msgs.append(["role": "assistant", "content": turn.reply])
+            var assistantParts = [turn.reply]
+            for result in turn.toolResults {
+                if let text = result.text { assistantParts.append("Tool result: \(text)") }
+                if let path = result.attachmentPath {
+                    assistantParts.append("Saved screenshot attachment: \(path)")
+                }
+            }
+            msgs.append(["role": "assistant", "content": assistantParts.joined(separator: "\n")])
         }
         var parts = ["User said: \(transcript)"]
         if let app = context.app?.appName { parts.append("Front app: \(app)") }

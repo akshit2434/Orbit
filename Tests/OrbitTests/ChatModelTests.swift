@@ -40,7 +40,15 @@ final class ChatModelTests: XCTestCase {
         XCTAssertEqual(failed?.reply, "Network unavailable.")
         let messages = TalkController.messages(transcript: "next", context: ContextBundle(), history: Array(model.store.turns.reversed()))
         XCTAssertFalse(messages.contains(where: { $0["content"] == "Network unavailable." }))
-        if let failed { model.remove(failed) }
+        if let failed {
+            let oldID = failed.id
+            model.retry(failed)
+            try? await Task.sleep(for: .milliseconds(100))
+            XCTAssertEqual(model.store.turns.count, 1)
+            XCTAssertNotEqual(model.store.turns.first?.id, oldID)
+            XCTAssertEqual(model.store.turns.first?.transcript, "fail")
+            if let retried = model.store.turns.first { model.remove(retried) }
+        }
         XCTAssertTrue(model.store.turns.isEmpty)
     }
 

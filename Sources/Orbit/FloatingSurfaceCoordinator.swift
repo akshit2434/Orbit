@@ -16,6 +16,7 @@ final class FloatingSurfaceCoordinator {
     private let model: OrbitPanelModel
     private(set) var orbPanel: OrbitPanel
     private(set) var surfacePanel: OrbitPanel
+    private(set) var historyPanel: OrbitPanel
     private var cancellables = Set<AnyCancellable>()
     private var pointerGrabOffset: NSPoint?
     private var snapFrame: NSRect?
@@ -24,17 +25,21 @@ final class FloatingSurfaceCoordinator {
         self.model = model
         orbPanel = Self.makePanel(size: surfaceSize(.orb), keyCapable: false)
         surfacePanel = Self.makePanel(size: surfaceSize(.voice))
+        historyPanel = Self.makePanel(size: NSSize(width: 36, height: 36), keyCapable: false)
 
         orbPanel.contentView = NSHostingView(
             rootView: OrbitOverlayView(model: model, role: .orb))
         surfacePanel.contentView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .attached))
+        historyPanel.contentView = FirstMouseHostingView(
+            rootView: OrbitOverlayView(model: model, role: .history))
 
         wireModel()
         restoreOrbPosition()
         observeMode()
         observeScreens()
         orbPanel.orderFrontRegardless()
+        historyPanel.orderOut(nil)
         updateAttachedSurface(for: model.mode)
     }
 
@@ -72,6 +77,10 @@ final class FloatingSurfaceCoordinator {
     private func observeMode() {
         model.$mode.removeDuplicates().sink { [weak self] mode in
             self?.updateAttachedSurface(for: mode)
+            self?.updateHistoryPanel()
+        }.store(in: &cancellables)
+        model.$historyVisible.removeDuplicates().sink { [weak self] _ in
+            self?.updateHistoryPanel()
         }.store(in: &cancellables)
     }
 
@@ -137,6 +146,7 @@ final class FloatingSurfaceCoordinator {
             height: orbPanel.frame.height)
         orbPanel.setFrame(containedPanelFrame(frame, screen: screen, margin: 2), display: true)
         updateAttachedSurface(for: model.mode)
+        updateHistoryPanel()
     }
 
     private func move(by delta: CGSize) {
@@ -146,6 +156,7 @@ final class FloatingSurfaceCoordinator {
         frame.origin.y -= delta.height
         orbPanel.setFrame(containedPanelFrame(frame, screen: screen, margin: 2), display: true)
         updateAttachedSurface(for: model.mode)
+        updateHistoryPanel()
     }
 
     private func snapToEdge() {
@@ -164,6 +175,7 @@ final class FloatingSurfaceCoordinator {
         } completionHandler: { [weak self] in
             Task { @MainActor [weak self] in
                 self?.updateAttachedSurface(for: self?.model.mode ?? .orb)
+                self?.updateHistoryPanel()
                 self?.persistAnchor()
             }
         }
@@ -175,6 +187,7 @@ final class FloatingSurfaceCoordinator {
         guard drift > 2 else { return }
         orbPanel.setFrame(target, display: true)
         updateAttachedSurface(for: model.mode)
+        updateHistoryPanel()
         persistAnchor()
     }
 
@@ -182,6 +195,7 @@ final class FloatingSurfaceCoordinator {
         let screen = preferredScreen()?.visibleFrame ?? NSScreen.main?.visibleFrame ?? orbPanel.frame
         orbPanel.setFrame(containedPanelFrame(orbPanel.frame, screen: screen), display: true)
         updateAttachedSurface(for: model.mode)
+        updateHistoryPanel()
         persistAnchor()
     }
 
@@ -190,5 +204,17 @@ final class FloatingSurfaceCoordinator {
         UserDefaults.standard.set(anchor.maxX, forKey: PositionKey.anchorX)
         UserDefaults.standard.set(anchor.midY, forKey: PositionKey.centerY)
         AnchorStore.save(anchor)
+    }
+
+    private func updateHistoryPanel() {
+        guard model.mode == .orb, model.historyVisible else {
+            historyPanel.orderOut(nil)
+            return
+        }
+        let screen = preferredScreen()?.visibleFrame ?? orbPanel.frame
+        let anchor = OrbAnchor(center: NSPoint(x: orbPanel.frame.midX, y: orbPanel.frame.midY))
+        let side = expansionSide(anchorX: anchor.center.x, anchorY: anchor.center.y, screen: screen)
+        historyPanel.setFrame(historyButtonFrame(anchor: anchor, side: side, screen: screen), display: true)
+        historyPanel.orderFrontRegardless()
     }
 }

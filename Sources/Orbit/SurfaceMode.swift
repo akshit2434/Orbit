@@ -11,13 +11,30 @@ enum SurfaceMode: Equatable, Sendable {
 
 func surfaceSize(_ mode: SurfaceMode) -> NSSize {
     switch mode {
-    case .orb: NSSize(width: 80, height: 92)
+    case .orb: NSSize(width: 56, height: 56)
     case .voice: NSSize(width: 218, height: 76)
     case .thinking: NSSize(width: 250, height: 80)
     case .output: NSSize(width: 250, height: 120)
     case .card: NSSize(width: 320, height: 400)
     case .history: NSSize(width: 320, height: 400)
     }
+}
+
+func historyButtonFrame(
+    anchor: OrbAnchor,
+    side: ExpansionSide,
+    screen: CGRect,
+    size: CGFloat = 36,
+    gap: CGFloat = 4
+) -> NSRect {
+    let orb: CGFloat = 40
+    let origin: CGPoint = switch side {
+    case .left: CGPoint(x: anchor.center.x - orb / 2 - gap - size, y: anchor.center.y - size / 2)
+    case .right: CGPoint(x: anchor.center.x + orb / 2 + gap, y: anchor.center.y - size / 2)
+    case .above: CGPoint(x: anchor.center.x - size / 2, y: anchor.center.y + orb / 2 + gap)
+    case .below: CGPoint(x: anchor.center.x - size / 2, y: anchor.center.y - orb / 2 - gap - size)
+    }
+    return containedPanelFrame(NSRect(origin: origin, size: NSSize(width: size, height: size)), screen: screen, margin: 2)
 }
 
 enum ExpansionSide: Equatable {
@@ -70,10 +87,11 @@ func attachedSurfacePlacement(
     anchor: OrbAnchor,
     preferredSide: ExpansionSide,
     screen: CGRect,
-    gap: CGFloat = 6,
+    gap: CGFloat = 4,
     margin: CGFloat = 12
 ) -> SurfacePlacement {
-    let orbSize = surfaceSize(.orb)
+    // Placement follows the visible orb, not its larger transparent drag/hover panel.
+    let orbSize = NSSize(width: 40, height: 40)
     let orbFrame = NSRect(
         x: anchor.center.x - orbSize.width / 2,
         y: anchor.center.y - orbSize.height / 2,

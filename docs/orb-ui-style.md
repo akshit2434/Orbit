@@ -39,9 +39,9 @@ This document is the visual and interaction contract for Orbit's primary floatin
 
 One `SurfaceMode` drives view, panel size, and placement. Panel sizes (points):
 
-- The orb panel is permanently 80×92. All non-orb modes render in a separate attached panel; mode changes never resize the orb window.
+- The orb panel is permanently 56×56. Non-orb modes render in a separate attached panel, and the hover history control renders in its own 36×36 panel; mode changes never resize the orb window.
 
-- orb 80×92, voice 218×76, thinking 250×80, output 250×120, card 320×400, history 320×400.
+- orb 56×56, history control 36×36, voice 218×76, thinking 250×80, output 250×120, card 320×400, history 320×400.
 - The card content view is card outer 296 (content 272 after padding) + 12pt trailing inset = 308 within the 320pt panel; height content-driven ≤400 (reply scroll capped at 140, history list at 90, orb docked at the edge).
 - History renders inside the card. Legacy `isExpanded`/`chatOpen`/`historyOpen` flags are retired; `isExpanded` and `chatOpen` remain only as computed views of mode.
 

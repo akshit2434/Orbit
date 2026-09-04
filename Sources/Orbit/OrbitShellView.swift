@@ -45,12 +45,11 @@ enum OrbitState: Equatable {
 }
 
 struct OrbitOverlayView: View {
-    enum Role { case orb, attached }
+    enum Role { case orb, attached, history }
 
     @ObservedObject var model: OrbitPanelModel
     let role: Role
     @State private var isHovered = false
-    @State private var historyHideTask: Task<Void, Never>?
 
     init(model: OrbitPanelModel, role: Role = .attached) {
         self.model = model
@@ -59,22 +58,28 @@ struct OrbitOverlayView: View {
 
     var body: some View {
         Group {
-            if role == .orb { orbRoot } else { attachedRoot }
+            switch role {
+            case .orb: orbRoot
+            case .attached: attachedRoot
+            case .history: detachedHistoryButton
+            }
         }
         .preferredColorScheme(.light)
     }
 
     private var orbRoot: some View {
         ZStack {
-            historyButton
             MotionOrb(state: model.state, size: 30) { model.activate() }
                 .frame(width: 56, height: 56)
-                .onHover { updateOrbHover($0) }
+                .onHover { model.setHistoryHover($0) }
                 .simultaneousGesture(panelDragGesture)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: model.mode) { _, mode in
-            if mode != .orb { isHovered = false }
+            if mode != .orb {
+                isHovered = false
+                model.historyVisible = false
+            }
         }
     }
 
@@ -84,11 +89,8 @@ struct OrbitOverlayView: View {
             case .orb:
                 EmptyView()
             case .voice:
-                ZStack(alignment: .trailing) {
-                    historyButton
-                    surface
-                        .frame(width: 190, height: 44)
-                }
+                surface
+                    .frame(width: 190, height: 44)
                 .onHover { isHovered = $0 }
                 .transition(.blurReplace.combined(with: .opacity))
                 if model.isMockVoice {
@@ -120,20 +122,6 @@ struct OrbitOverlayView: View {
         .animation(.easeInOut(duration: 0.46), value: model.streamText)
         .animation(.easeInOut(duration: 0.46), value: model.store.turns.count)
         .allowsWindowActivationEvents()
-    }
-
-    private func updateOrbHover(_ hovering: Bool) {
-        guard model.mode == .orb else { return }
-        historyHideTask?.cancel()
-        if hovering {
-            isHovered = true
-        } else {
-            historyHideTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(500))
-                guard !Task.isCancelled else { return }
-                isHovered = false
-            }
-        }
     }
 
     private var thinkingBubble: some View {
@@ -206,6 +194,7 @@ struct OrbitOverlayView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .disabled(model.isGenerating)
                 .accessibilityLabel("Select thread")
                 Button { model.newThread() } label: {
                     Image(systemName: "square.and.pencil")
@@ -213,6 +202,7 @@ struct OrbitOverlayView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("New thread")
+                .disabled(model.isGenerating)
                 Button {
                     model.closeChat()
                 } label: {
@@ -232,6 +222,16 @@ struct OrbitOverlayView: View {
             .simultaneousGesture(panelDragGesture)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
+                    if let toast = model.contextToast {
+                        Text(toast)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.05), in: Capsule())
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
                     if let selected = model.selectedTurn {
                         Button {
                             model.selectedTurn = nil
@@ -248,7 +248,7 @@ struct OrbitOverlayView: View {
                             reply: model.streamText.isEmpty
                                 ? (model.hintText ?? "Thinking…") : model.streamText)
                     } else {
-                        ForEach(Array(model.store.turns.reversed())) { turn in
+                        ForEach(Array(model.store.turns.reversed().filter { $0.status != .generating })) { turn in
                             dialogueTurn(turn, fullReply: true)
                                 .contentShape(Rectangle())
                                 .onTapGesture { model.selectedTurn = turn }
@@ -279,7 +279,23 @@ struct OrbitOverlayView: View {
     }
 
     private func dialogueTurn(_ turn: ChatTurn, fullReply: Bool) -> some View {
-        dialogueStrings(transcript: turn.transcript, reply: turn.reply, fullReply: fullReply)
+        VStack(alignment: .leading, spacing: 5) {
+            dialogueStrings(transcript: turn.transcript, reply: turn.reply, fullReply: fullReply)
+            if turn.status != .completed {
+                HStack(spacing: 8) {
+                    Text(turn.status == .cancelled ? "Cancelled" : turn.status == .interrupted ? "Interrupted" : "Failed")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Button("Retry") { model.retry(turn) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 9, weight: .semibold))
+                    Button("Remove") { model.remove(turn) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     private func dialogueStrings(
@@ -339,41 +355,21 @@ struct OrbitOverlayView: View {
             model.openHistory()
         } label: {
             Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 10, weight: .regular))
-                .frame(width: 22, height: 22)
-                .foregroundStyle(.secondary)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay {
-                    Circle()
-                        .stroke(.white.opacity(0.4), lineWidth: 0.6)
-                }
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 30, height: 30)
+                .foregroundStyle(.white)
+                .background(.black, in: Circle())
         }
         .buttonStyle(.plain)
         .focusable(false)
         .focusEffectDisabled()
         .accessibilityLabel("Show history")
-        .onHover { hovering in
-            updateHistoryHover(hovering)
-        }
-        .opacity(isHovered && model.mode == .orb ? 1 : 0)
-        .scaleEffect(isHovered && model.mode == .orb ? 1 : 0.8)
-        .offset(x: isHovered && model.mode == .orb ? -30 : 0)
-        .allowsHitTesting(isHovered && model.mode == .orb)
-        .animation(.easeOut(duration: 0.1), value: isHovered)
-        .animation(.smooth(duration: 0.22), value: model.isExpanded)
+        .onHover { model.setHistoryHover($0) }
     }
 
-    private func updateHistoryHover(_ hovering: Bool) {
-        historyHideTask?.cancel()
-        if hovering {
-            isHovered = true
-        } else {
-            historyHideTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(500))
-                guard !Task.isCancelled else { return }
-                isHovered = false
-            }
-        }
+    private var detachedHistoryButton: some View {
+        historyButton
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var cardInputRow: some View {
@@ -387,18 +383,29 @@ struct OrbitOverlayView: View {
                     model.send()
                 }
                 .accessibilityLabel("Ask Orbit")
+                .disabled(model.isGenerating)
             Button {
-                model.activate()
+                if model.isGenerating { model.stopGenerating() } else { model.activate() }
             } label: {
-                Image(systemName: "mic")
-                    .font(.system(size: 11, weight: .medium))
-                    .frame(width: 30, height: 30)
+                ZStack {
+                    if model.isGenerating {
+                        Circle().stroke(.primary, lineWidth: 1)
+                            .frame(width: 24, height: 24)
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(.primary)
+                            .frame(width: 7, height: 7)
+                    } else {
+                        Image(systemName: "mic")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                }
+                .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .focusable(false)
             .focusEffectDisabled()
-            .accessibilityLabel("Voice input")
+            .accessibilityLabel(model.isGenerating ? "Stop generating" : "Voice input")
         }
         .padding(.horizontal, 3)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))

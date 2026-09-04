@@ -50,4 +50,19 @@ final class StreamingTests: XCTestCase {
         XCTAssertTrue(joined.contains("what am I looking at?"))
         XCTAssertTrue(joined.contains("A browser."))
     }
+
+    @MainActor func testHistoryExposesPersistedToolResultsToPlanner() {
+        let turn = ChatTurn(
+            transcript: "look at this",
+            reply: "I see a settings page.",
+            tools: ["capture_screen"],
+            toolResults: [ToolResult(
+                kind: .screenshot,
+                status: .success,
+                text: "Screen captured successfully.",
+                attachmentPath: "attachments/t/s.png")])
+        let messages = TalkController.messages(transcript: "what was selected?", context: ContextBundle(), history: [turn])
+        let joined = messages.compactMap { $0["content"] }.joined(separator: "\n")
+        XCTAssertTrue(joined.contains("Saved screenshot attachment: attachments/t/s.png"))
+    }
 }

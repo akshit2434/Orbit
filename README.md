@@ -20,7 +20,7 @@ Early product and architecture definition. The native floating shell is rebuilt 
 
 ## Floating surface
 
-The floating shell uses two coordinated native panels: a permanently fixed 80×92 orb panel and an independently sized/clamped attached panel for voice, thinking, output, card, and history. The orb owns pointer-locked dragging and magnetic edge settling; opening another mode never resizes or re-anchors it. Neither panel participates in native macOS movement or tiling.
+The floating shell uses three coordinated native panels: a fixed 56×56 orb panel, an independently sized/clamped panel for voice/thinking/output/chat, and a small hover-only history panel. The orb owns pointer-locked dragging and magnetic edge settling; attached surfaces calculate from its visible footprint and appear toward available screen space. No panel participates in native macOS movement or tiling.
 
 The anchor (`maxX`, `midY`) persists to `anchor.json` under `Application Support/com.akshit2434.orbit` (restored on launch when still on-screen), with `UserDefaults` as fallback. Replies carry a `Worked for Xs` duration that freezes at completion. Thinking, output, card, composer, and history surfaces are opaque white with high-contrast close controls; glass remains reserved for the orb/voice surface. The card uses a compact chat structure: orb/duration header, chronological prompt/reply body with per-response copy controls, and a bottom-pinned composer. History is session-only (newest 50 turns) and renders inside the card.
 
@@ -38,8 +38,8 @@ Click the orb to open its live microphone waveform. Hover the waveform to reveal
 
 The prototype now answers short voice/text prompts with tool-gated context:
 
-- **See:** "What am I looking at?" captures the display under the pointer, excludes Orbit's own windows, and attaches the PNG to the OpenRouter turn as multimodal image content. Capture happens only for an explicitly screen-related prompt. Screen Recording denial and capture failure are reported to the model as distinct unavailable states; pasted text is included only when present and clipboard is read only when explicitly allowed.
-- **Talk:** Send (or Return) goes thinking → the reply streams token-by-token into a chat card under the capsule → idle. While context tools collect, a one-line hint names them (e.g. `glancing at your screen… noting the front app…`). Replies are history-aware: the last 6 turns travel with each request so follow-ups resolve from conversation. Escape cancels the in-flight stream; the close cross (or Escape) dismisses the card.
+- **See:** OpenRouter chooses when to call `capture_screen`, `read_clipboard`, or `load_screenshot`; there is no production keyword router. Captured PNGs exclude Orbit's windows, are stored as thread attachments, and can be loaded by the model on later turns. Tool failures return readable context instead of pretending the model saw something.
+- **Talk:** Send (or Return) goes thinking → token stream → completed, failed, or cancelled. A thread permits one generation at a time; its composer becomes a stop control while working, and collapsing does not cancel it. Failed, cancelled, and interrupted turns stay visible with Retry/Remove but are excluded from model history. Completed history is currently uncapped and sent in full.
 
 ### Text testing without a mic
 
@@ -57,7 +57,9 @@ Copy nothing into the repo; create an untracked `.env.local` at the repo root wi
 - `OPENROUTER_MODEL` — model name (default `openai/gpt-4o-mini`).
 - `ASSEMBLYAI_API_KEY` — enables live mic transcription when the voice send arrow is pressed; `--mock-voice` uses `MockVoiceSession` instead.
 
-Without keys the app still runs: `OpenRouterClient` falls back to a local stub reply (`Heard: … | app: … | screenshot: … | paste: … chars.`) so the whole See + Talk flow is exercisable offline.
+Without keys the app still runs: `OpenRouterClient` falls back to a local stub reply (`Heard: … | app: … | screenshot: … | paste: … chars.`), and deterministic tool selection remains available only for offline tests.
+
+Threads, selected-thread identity, outcomes, timings, and tool metadata are saved locally in `Application Support/com.akshit2434.orbit/chat-store.json`. Screenshot attachments are stored under its `attachments` directory and removed with their owning turn. This local-first format is the future cloud-sync boundary.
 
 ## History chat
 
