@@ -3,6 +3,54 @@ import XCTest
 
 @MainActor
 final class ChatModelTests: XCTestCase {
+    private struct SlowStreamer: TokenStreamer {
+        func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<String> {
+            AsyncStream { continuation in
+                Task {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    guard !Task.isCancelled else { return }
+                    continuation.yield("done")
+                    continuation.finish()
+                }
+            }
+        }
+    }
+
+    func testDuplicateSendIsBlockedAndStopMarksTurnCancelled() async {
+        let svc = ContextService()
+        let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: "key", openRouterModel: "m"))
+        let model = OrbitPanelModel(
+            isMockVoice: true,
+            context: svc,
+            talk: TalkSession(context: svc, client: client, streamer: SlowStreamer()),
+            voice: MockVoiceSession())
+        model.submit(transcript: "first", keepCard: true)
+        model.submit(transcript: "second", keepCard: true)
+        XCTAssertTrue(model.isGenerating)
+        XCTAssertEqual(model.store.turns.count, 1)
+        XCTAssertEqual(model.store.turns.first?.transcript, "first")
+
+        model.stopGenerating()
+        XCTAssertFalse(model.isGenerating)
+        XCTAssertEqual(model.store.turns.first?.status, .cancelled)
+    }
+
+    func testActivateDuringGenerationOpensCardWithoutCancelling() async {
+        let svc = ContextService()
+        let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: "key", openRouterModel: "m"))
+        let model = OrbitPanelModel(
+            isMockVoice: true,
+            context: svc,
+            talk: TalkSession(context: svc, client: client, streamer: SlowStreamer()),
+            voice: MockVoiceSession())
+        model.submit(transcript: "first")
+        model.closeChat()
+        model.activate()
+        XCTAssertEqual(model.mode, .card)
+        XCTAssertTrue(model.isGenerating)
+        try? await Task.sleep(for: .milliseconds(350))
+        XCTAssertEqual(model.store.turns.first?.status, .completed)
+    }
     func testEmptySendKeepsSurfaceOpen() {
         let svc = ContextService()
         let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))

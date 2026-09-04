@@ -1,7 +1,7 @@
 import Foundation
 
 public enum TurnStatus: String, Codable, Hashable, Sendable {
-    case completed, failed, cancelled, interrupted
+    case generating, completed, failed, cancelled, interrupted
 }
 
 public struct ToolResult: Identifiable, Codable, Hashable, Sendable {

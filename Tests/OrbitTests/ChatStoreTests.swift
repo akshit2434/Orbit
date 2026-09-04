@@ -27,6 +27,17 @@ final class ChatStoreTests: XCTestCase {
         XCTAssertEqual(restored.turns.count, 75)
         XCTAssertTrue(restored.threads.contains(where: { $0.id == secondID }))
     }
+
+    func testRestoredGeneratingTurnBecomesInterrupted() {
+        let url = temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = ChatStore(storageURL: url)
+        store.append(ChatTurn(transcript: "unfinished", reply: "partial", tools: [], status: .generating))
+
+        let restored = ChatStore(storageURL: url)
+        XCTAssertEqual(restored.turns.first?.status, .interrupted)
+        XCTAssertTrue(restored.turns.first?.reply.contains("interrupted") == true)
+    }
     func testAppendKeepsNewestFirst() {
         let s = ChatStore()
         s.append(ChatTurn(transcript: "a", reply: "b", tools: []))

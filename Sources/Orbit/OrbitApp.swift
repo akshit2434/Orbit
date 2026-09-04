@@ -19,6 +19,7 @@ final class OrbitPanelModel: ObservableObject {
         mode == .thinking || mode == .output || mode == .card || mode == .history
     }
     @Published var selectedTurn: ChatTurn?
+    @Published private(set) var isGenerating = false
     let store: ChatStore
 
     let microphone = MicrophoneMonitor()
@@ -71,9 +72,10 @@ final class OrbitPanelModel: ObservableObject {
 
     func activate() {
         guard !isDragging else { return }
-
-        answerTask?.cancel()
-        answerTask = nil
+        if isGenerating {
+            mode = .card
+            return
+        }
         state = .listening
         mode = .voice
         workStart = nil
@@ -151,6 +153,9 @@ final class OrbitPanelModel: ObservableObject {
     }
 
     func cancel() {
+        if isGenerating {
+            stopGenerating()
+        }
         answerTask?.cancel()
         answerTask = nil
         voice.stop()
@@ -179,6 +184,7 @@ final class OrbitPanelModel: ObservableObject {
     }
 
     func newThread() {
+        guard !isGenerating else { return }
         store.newThread()
         streamText = ""
         currentTranscript = ""
@@ -190,6 +196,7 @@ final class OrbitPanelModel: ObservableObject {
     }
 
     func selectThread(_ id: UUID) {
+        guard !isGenerating else { return }
         store.selectThread(id)
         streamText = store.turns.first?.reply ?? ""
         currentTranscript = store.turns.first?.transcript ?? ""
@@ -203,6 +210,7 @@ final class OrbitPanelModel: ObservableObject {
     }
 
     func send() {
+        guard !isGenerating else { return }
         let isChatMode =
             mode == .card || mode == .history || mode == .output || mode == .thinking
         let source = isChatMode ? askText : mockText
@@ -247,14 +255,14 @@ final class OrbitPanelModel: ObservableObject {
 
     func submit(transcript: String, keepCard: Bool = false) {
         let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty, !isGenerating else { return }
 
         answerTask?.cancel()
         microphone.stop()
         voice.stop()
         streamText = ""
         hintText = nil
-        workStart = nil
+        workStart = Date()
         completedWorkDuration = nil
         currentTranscript = text
         state = .thinking
@@ -271,6 +279,11 @@ final class OrbitPanelModel: ObservableObject {
         let accumulator = Accumulator()
         let threadID = store.selectedThreadID
         let history = Array(store.turns.reversed())
+        let turnID = UUID()
+        store.append(
+            ChatTurn(id: turnID, transcript: text, reply: "", tools: [], status: .generating),
+            to: threadID)
+        isGenerating = true
         answerTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.talk.answerStream(
@@ -314,13 +327,37 @@ final class OrbitPanelModel: ObservableObject {
                 clipboardAllowed: self.context.clipboardAllowed
             )
             let tools = fired.map(\.rawValue).sorted()
-            self.store.append(ChatTurn(transcript: text, reply: reply, tools: tools), to: threadID)
+            self.store.updateTurn(id: turnID, in: threadID) { turn in
+                turn.reply = reply
+                turn.tools = tools
+                turn.status = reply.isEmpty ? .failed : .completed
+                turn.duration = self.completedWorkDuration
+            }
             self.answerTask = nil
+            self.isGenerating = false
             if self.mode != .orb {
                 self.mode = keepCard ? .card : .output
             }
             self.state = .idle
         }
+    }
+
+    func stopGenerating() {
+        guard isGenerating else { return }
+        answerTask?.cancel()
+        answerTask = nil
+        isGenerating = false
+        hintText = nil
+        completedWorkDuration = max(0, workStart.map { Date().timeIntervalSince($0) } ?? 0)
+        if let turn = store.turns.first(where: { $0.status == .generating }) {
+            store.updateTurn(id: turn.id, in: store.selectedThreadID) { value in
+                value.reply = streamText
+                value.status = .cancelled
+                value.duration = completedWorkDuration
+            }
+        }
+        state = .idle
+        if mode != .orb { mode = .card }
     }
 }
 

@@ -50,8 +50,19 @@ public final class ChatStore: ObservableObject, ChatStoring {
            let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data),
            !snapshot.threads.isEmpty,
            snapshot.threads.contains(where: { $0.id == snapshot.selectedThreadID }) {
-            threads = snapshot.threads
+            threads = snapshot.threads.map { thread in
+                var restored = thread
+                restored.turns = restored.turns.map { turn in
+                    guard turn.status == .generating else { return turn }
+                    var interrupted = turn
+                    interrupted.status = .interrupted
+                    interrupted.reply = "Generation interrupted when Orbit closed."
+                    return interrupted
+                }
+                return restored
+            }
             selectedThreadID = snapshot.selectedThreadID
+            if threads != snapshot.threads { save() }
         } else {
             let initial = ChatThread()
             threads = [initial]
@@ -84,6 +95,21 @@ public final class ChatStore: ObservableObject, ChatStoring {
         if threads[index].title == "New chat" {
             threads[index].title = String(turn.transcript.prefix(42))
         }
+        objectWillChange.send()
+        save()
+    }
+
+    public func updateTurn(id: UUID, in threadID: UUID, mutate: (inout ChatTurn) -> Void) {
+        guard let threadIndex = threads.firstIndex(where: { $0.id == threadID }),
+              let turnIndex = threads[threadIndex].turns.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&threads[threadIndex].turns[turnIndex])
+        objectWillChange.send()
+        save()
+    }
+
+    public func removeTurn(id: UUID, from threadID: UUID) {
+        guard let index = threads.firstIndex(where: { $0.id == threadID }) else { return }
+        threads[index].turns.removeAll(where: { $0.id == id })
         objectWillChange.send()
         save()
     }
