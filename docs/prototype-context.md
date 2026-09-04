@@ -98,6 +98,8 @@ The first listening interaction may prompt for microphone access. The current ve
 
 ## Next vertical slice
 
+Before further visual polish, refactor the floating shell from one dynamically resized panel into two coordinated panels: a stable orb panel and an independently clamped attached-surface panel. The implementation plan is [Two-panel floating surface refactor](superpowers/plans/2026-09-04-two-panel-surface-refactor.md).
+
 Live microphone → `AssemblyAISTTSession.transcribeWAV` wiring is explicitly the next slice, not this merge: this merge covers the mock voice session plus the offline OpenRouter stub path only, with the real STT/LLM calls present but unwired to live mic audio. The next slice hooks captured WAV bytes to `transcribeWAV` and exercises the keyed path end to end.
 
 The next meaningful slice is richer “See”: attach real screenshot bytes via `captureScreenshot()`, add browser/active-window titles, then connected accounts and Solari execution as internal tools behind the same gating pattern.
