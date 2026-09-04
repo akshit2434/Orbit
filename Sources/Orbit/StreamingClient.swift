@@ -1,7 +1,7 @@
 import Foundation
 
 public protocol TokenStreamer: Sendable {
-    func stream(model: String, messages: [[String: String]], apiKey: String) -> AsyncStream<String>
+    func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<String>
 }
 
 public enum StreamParse {
@@ -21,10 +21,10 @@ public enum StreamParse {
 
 public struct OpenRouterTokenStreamer: TokenStreamer {
     public init() {}
-    public func stream(model: String, messages: [[String: String]], apiKey: String) -> AsyncStream<String> {
+    public func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<String> {
         AsyncStream { continuation in
             Task {
-                var request = OpenRouterClient.buildRequest(model: model, messages: messages, apiKey: apiKey)
+                var request = OpenRouterClient.buildRequest(model: model, messages: messages, imagePNG: imagePNG, apiKey: apiKey)
                 var body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any] ?? [:]
                 body["stream"] = true
                 request.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -53,7 +53,7 @@ public struct StubTokenStreamer: TokenStreamer {
     public var texts: [String]
     public init(text: String) { self.texts = [text] }
     public init(texts: [String]) { self.texts = texts }
-    public func stream(model: String, messages: [[String: String]], apiKey: String) -> AsyncStream<String> {
+    public func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<String> {
         let chunks = texts
         return AsyncStream { continuation in
             for chunk in chunks { continuation.yield(chunk) }

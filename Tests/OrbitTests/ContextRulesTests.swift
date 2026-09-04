@@ -40,4 +40,40 @@ final class ContextRulesTests: XCTestCase {
         XCTAssertEqual(bundle.notes, ["screenshot-requested"])
         XCTAssertNil(bundle.screenshotPNG)
     }
+
+    @MainActor
+    func testAsyncCollectionDoesNotCaptureWithoutScreenshotTool() async {
+        var captures = 0
+        let svc = ContextService(screenshotProvider: {
+            captures += 1
+            return (Data([1]), .captured)
+        })
+        let bundle = await svc.collectForRequest(tools: [.activeAppWindow])
+        XCTAssertEqual(captures, 0)
+        XCTAssertNil(bundle.screenshotPNG)
+        XCTAssertEqual(bundle.screenshotStatus, .notRequested)
+    }
+
+    @MainActor
+    func testAsyncCollectionCapturesOnlyWhenRequested() async {
+        var captures = 0
+        let svc = ContextService(screenshotProvider: {
+            captures += 1
+            return (Data([1, 2]), .captured)
+        })
+        let bundle = await svc.collectForRequest(tools: [.screenshot])
+        XCTAssertEqual(captures, 1)
+        XCTAssertEqual(bundle.screenshotPNG, Data([1, 2]))
+        XCTAssertEqual(bundle.screenshotStatus, .captured)
+        XCTAssertEqual(bundle.notes, ["screenshot-captured"])
+    }
+
+    @MainActor
+    func testAsyncCollectionPreservesPermissionDeniedState() async {
+        let svc = ContextService(screenshotProvider: { (nil, .permissionDenied) })
+        let bundle = await svc.collectForRequest(tools: [.screenshot])
+        XCTAssertNil(bundle.screenshotPNG)
+        XCTAssertEqual(bundle.screenshotStatus, .permissionDenied)
+        XCTAssertEqual(bundle.notes, ["screenshot-permissionDenied"])
+    }
 }

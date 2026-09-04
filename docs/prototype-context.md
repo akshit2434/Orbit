@@ -30,8 +30,8 @@ OrbitApp
           ├─ mockText / askText / streamText / hintText / workStart / isMockVoice (+ computed isExpanded / chatOpen)
           ├─ selectedTurn + ChatStore (selectable in-memory threads, cap 50 turns each)
           ├─ MicrophoneMonitor
-          ├─ ContextService (active-app, pastedText, clipboard-gated, screenshot note)
-          ├─ TalkSession (TalkController.selectTools → ContextService.collect → token stream via OpenRouterTokenStreamer, history-aware messages)
+          ├─ ContextService (active-app, pastedText, clipboard-gated, permission-aware screenshot)
+          ├─ TalkSession (TalkController.selectTools → ContextService.collectForRequest → token stream via OpenRouterTokenStreamer, history-aware messages)
           └─ VoiceSession (MockVoiceSession with --mock-voice, else AssemblyAISTTSession)
 ```
 
@@ -75,8 +75,8 @@ Thinking and output bubbles sit 4 pt from the orb. Non-orb dialogue surfaces are
 
 - `VoiceSession` (real: `AssemblyAISTTSession`; mock: `MockVoiceSession`) delivers final transcripts into `submit(transcript:)`; the view never sees provider callbacks.
 - `TalkController.selectTools(transcript:hasPaste:clipboardAllowed:)` is the only place that decides which `ContextTool`s fire: screen words → `.screenshot` + `.activeAppWindow`; non-empty paste → `.pastedText`; explicit opt-in → `.clipboard`. Nothing else can pull context.
-- `ContextService.collect(tools:)` enforces the gates: clipboard reads only when `clipboardAllowed`, screenshot capture only appends a `screenshot-requested` note (async `captureScreenshot()` fills `screenshotPNG` separately), empty tools yield an empty bundle.
-- Streaming runs through `TokenStreamer` (`OpenRouterTokenStreamer` live SSE via `StreamParse.tokenDeltas`, `StubTokenStreamer` in tests). `TalkController.messages(transcript:context:history:)` builds the prompt from the collected bundle plus the trailing history turns; `hintStrings(for:)` is the single source of the progress line.
+- `ContextService.collectForRequest(tools:)` enforces the gates: clipboard reads only when `clipboardAllowed`; screenshot capture runs only when `.screenshot` was selected. It checks Screen Recording permission, captures the display under the pointer while excluding Orbit's own windows, and records `captured`, `permissionDenied`, or `unavailable` separately. Empty tools never invoke capture.
+- Streaming runs through `TokenStreamer` (`OpenRouterTokenStreamer` live SSE via `StreamParse.tokenDeltas`, `StubTokenStreamer` in tests). `TalkController.messages(transcript:context:history:)` builds the prompt from the collected bundle plus the trailing history turns; `hintStrings(for:)` is the single source of the progress line. A captured PNG is encoded as an OpenRouter `image_url` data URL alongside the final user text for both streaming and non-streaming requests.
 - `ChatStore` (behind the `ChatStoring` persistence seam) owns selectable in-memory `ChatThread`s and keeps the newest 50 turns per thread. The selected thread receives orb and card prompts until the user creates or selects another thread. `submit` captures that thread ID, passes its chronological recent history into `TalkSession`, and appends completion back to the originating thread. `openHistory()` enters history mode with no stale timer; `closeChat()` only collapses and intentionally leaves active work running; explicit cancel still cancels.
 - All panel frame writes pass through `containedPanelFrame`, including launch restoration, mode resize, live drag, release projection, edge snap, and delayed reassert. Tests cover every surface mode at all four off-screen corner requests on a non-zero-origin display.
 - `OpenRouterClient.complete(transcript:context:)` builds the prompt only from the collected bundle (front-app name, pasted text, clipboard, screenshot flag) and falls back to the stub reply when no key is configured. API keys never appear in logs, replies, or diffs.
@@ -94,12 +94,12 @@ swift run Orbit
 swift run Orbit -- --mock-voice   # text inject, no mic or keys needed
 ```
 
-The first listening interaction may prompt for microphone access. The current verification baseline is a successful `swift build`, the full `swift test` suite, a clean `git diff --check`, `.env.local` untracked, plus the Task 3 live E2E matrix (streaming multi-token replies, history memory probes, screen/app tools with hint, clipboard-denied no-leak, denied-screen graceful completion, empty-Enter stays open, long-reply completion, store-level reread; mic round-trip headed-only) with stub-mode parity via the nil-key tests. Full GUI manual checklist with `--mock-voice` remains owed in a headed session because accessory-only panels are not exposed to the current UI automation inventory.
+The first listening interaction may prompt for microphone access; the first explicit screen-related request may prompt for Screen Recording access. The current verification baseline is a successful `swift build`, the full `swift test` suite, a clean `git diff --check`, `.env.local` untracked, plus the Task 3 live E2E matrix (streaming multi-token replies, history memory probes, screen/app tools with hint, clipboard-denied no-leak, denied-screen graceful completion, empty-Enter stays open, long-reply completion, store-level reread; mic round-trip headed-only) with stub-mode parity via the nil-key tests. Automated coverage verifies that ordinary prompts do not invoke capture, explicit screen prompts do, permission denial remains distinguishable, and PNG bytes are serialized into the documented multimodal request shape. Full GUI manual checklist with `--mock-voice` remains owed in a headed session because accessory-only panels are not exposed to the current UI automation inventory.
 
 ## Next vertical slice
 
 The two-panel floating-surface refactor is implemented; the original implementation plan remains at [Two-panel floating surface refactor](superpowers/plans/2026-09-04-two-panel-surface-refactor.md).
 
-Live microphone → `AssemblyAISTTSession.transcribeWAV` wiring is explicitly the next slice, not this merge: this merge covers the mock voice session plus the offline OpenRouter stub path only, with the real STT/LLM calls present but unwired to live mic audio. The next slice hooks captured WAV bytes to `transcribeWAV` and exercises the keyed path end to end.
+Live microphone audio is captured as WAV and sent through `AssemblyAISTTSession.transcribeWAV`; the resulting transcript enters the same selected-thread streaming path as typed input. Mock voice and nil-key fallbacks remain available for deterministic local testing.
 
-The next meaningful slice is richer “See”: attach real screenshot bytes via `captureScreenshot()`, add browser/active-window titles, then connected accounts and Solari execution as internal tools behind the same gating pattern.
+The next meaningful “See” enhancement is browser/active-window titles and optional region/window targeting; connected accounts and Solari execution remain future internal tools behind the same gating pattern.

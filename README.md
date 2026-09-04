@@ -38,7 +38,7 @@ Click the orb to open its live microphone waveform. Hover the waveform to reveal
 
 The prototype now answers short voice/text prompts with tool-gated context:
 
-- **See:** "What am I looking at?" collects the front app + window and requests a screenshot note; pasted text is only included when present; clipboard is only read when explicitly allowed. Denied/unavailable sources degrade to a graceful `.unavailable` path — never a leak.
+- **See:** "What am I looking at?" captures the display under the pointer, excludes Orbit's own windows, and attaches the PNG to the OpenRouter turn as multimodal image content. Capture happens only for an explicitly screen-related prompt. Screen Recording denial and capture failure are reported to the model as distinct unavailable states; pasted text is included only when present and clipboard is read only when explicitly allowed.
 - **Talk:** Send (or Return) goes thinking → the reply streams token-by-token into a chat card under the capsule → idle. While context tools collect, a one-line hint names them (e.g. `glancing at your screen… noting the front app…`). Replies are history-aware: the last 6 turns travel with each request so follow-ups resolve from conversation. Escape cancels the in-flight stream; the close cross (or Escape) dismisses the card.
 
 ### Text testing without a mic

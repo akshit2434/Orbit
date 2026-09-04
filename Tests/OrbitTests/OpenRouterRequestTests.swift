@@ -24,7 +24,7 @@ final class OpenRouterRequestTests: XCTestCase {
         let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))
         let context = ContextBundle(app: ActiveAppInfo(appName: "Safari", bundleID: nil, windowTitle: nil), pastedText: "hi", clipboard: nil, screenshotPNG: nil)
         let out = await client.complete(transcript: "hello", context: context)
-        XCTAssertEqual(out, "Heard: hello | app: Safari | screenshot: no | paste: 2 chars.")
+        XCTAssertEqual(out, "Heard: hello | app: Safari | screenshot: notRequested | paste: 2 chars.")
     }
 
     func testFailureStubHasStatusMarker() {
@@ -37,9 +37,38 @@ final class OpenRouterRequestTests: XCTestCase {
 
     func testCompleteStubScreenshotYes() async {
         let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))
-        let context = ContextBundle(app: nil, pastedText: nil, clipboard: nil, screenshotPNG: Data([0, 1]))
+        let context = ContextBundle(app: nil, pastedText: nil, clipboard: nil, screenshotPNG: Data([0, 1]), screenshotStatus: .captured)
         let out = await client.complete(transcript: "t", context: context)
-        XCTAssertTrue(out.contains("screenshot: yes"))
+        XCTAssertTrue(out.contains("screenshot: captured"))
         XCTAssertTrue(out.contains("app: none"))
+    }
+
+    func testBuildRequestEncodesScreenshotAsMultimodalDataURL() throws {
+        let png = Data([0, 1, 2])
+        let request = OpenRouterClient.buildRequest(
+            model: "m",
+            messages: [["role": "user", "content": "describe this"]],
+            imagePNG: png,
+            apiKey: "k")
+        let body = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
+        let content = try XCTUnwrap(messages.last?["content"] as? [[String: Any]])
+        XCTAssertEqual(content.first?["type"] as? String, "text")
+        XCTAssertEqual(content.first?["text"] as? String, "describe this")
+        XCTAssertEqual(content.last?["type"] as? String, "image_url")
+        let image = try XCTUnwrap(content.last?["image_url"] as? [String: String])
+        XCTAssertEqual(image["url"], "data:image/png;base64,AAEC")
+    }
+
+    func testPermissionDenialIsExplicitInModelContext() {
+        let context = ContextBundle(
+            app: nil,
+            pastedText: nil,
+            clipboard: nil,
+            screenshotPNG: nil,
+            screenshotStatus: .permissionDenied)
+        let messages = TalkController.messages(transcript: "what do you see?", context: context, history: [])
+        XCTAssertTrue(messages.last?["content"]?.contains("Screen Recording permission was denied") == true)
     }
 }

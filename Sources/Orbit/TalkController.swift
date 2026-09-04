@@ -52,7 +52,7 @@ public enum TalkController {
         if let app = context.app?.appName { parts.append("Front app: \(app)") }
         if let pasted = context.pastedText, !pasted.isEmpty { parts.append("Pasted text: \(pasted)") }
         if let clipboard = context.clipboard, !clipboard.isEmpty { parts.append("Clipboard: \(clipboard)") }
-        if context.screenshotPNG != nil { parts.append("Screenshot attached: yes") }
+        parts.append(contentsOf: OpenRouterClient.screenshotContext(context))
         msgs.append(["role": "user", "content": parts.joined(separator: "\n")])
         return msgs
     }
@@ -76,7 +76,7 @@ public final class TalkSession {
             hasPaste: !context.pastedText.isEmpty,
             clipboardAllowed: context.clipboardAllowed
         )
-        let bundle = context.collect(tools: tools)
+        let bundle = await context.collectForRequest(tools: tools)
         return await client.complete(transcript: transcript, context: bundle)
     }
 
@@ -86,13 +86,17 @@ public final class TalkSession {
         let tools = TalkController.selectTools(transcript: transcript,
             hasPaste: !context.pastedText.isEmpty, clipboardAllowed: context.clipboardAllowed)
         for hint in TalkController.hintStrings(for: tools) { onHint(hint) }
-        let bundle = context.collect(tools: tools)
+        let bundle = await context.collectForRequest(tools: tools)
         if client.config.openRouterKey?.isEmpty != false {
             onToken(OpenRouterClient.stub(transcript: transcript, context: bundle))
             return
         }
         let msgs = TalkController.messages(transcript: transcript, context: bundle, history: history)
-        for await token in streamer.stream(model: client.config.openRouterModel, messages: msgs, apiKey: client.config.openRouterKey ?? "") {
+        for await token in streamer.stream(
+            model: client.config.openRouterModel,
+            messages: msgs,
+            imagePNG: bundle.screenshotPNG,
+            apiKey: client.config.openRouterKey ?? "") {
             onToken(token)
         }
     }
