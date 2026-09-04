@@ -13,16 +13,15 @@ final class StreamingTests: XCTestCase {
     }
     func testStubYieldsWholeTextOnce() async {
         let s = StubTokenStreamer(text: "abc")
-        var got: [String] = []
+        var got: [StreamEvent] = []
         for await t in s.stream(model: "m", messages: [], imagePNG: nil, apiKey: "") { got.append(t) }
-        XCTAssertEqual(got, ["abc"])
+        XCTAssertEqual(got, [.token("abc")])
     }
     func testStubYieldsChunksInOrder() async {
         let s = StubTokenStreamer(texts: ["a", "b", "c"])
-        var got: [String] = []
+        var got: [StreamEvent] = []
         for await t in s.stream(model: "m", messages: [], imagePNG: nil, apiKey: "") { got.append(t) }
-        XCTAssertEqual(got, ["a", "b", "c"])
-        XCTAssertEqual(got.joined(), "abc")
+        XCTAssertEqual(got, [.token("a"), .token("b"), .token("c")])
     }
     func testHintStringsFollowTools() {
         XCTAssertEqual(TalkController.hintStrings(for: [.screenshot, .activeAppWindow]),

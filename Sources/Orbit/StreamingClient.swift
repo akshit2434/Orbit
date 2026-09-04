@@ -1,7 +1,12 @@
 import Foundation
 
+public enum StreamEvent: Equatable, Sendable {
+    case token(String)
+    case failure(String)
+}
+
 public protocol TokenStreamer: Sendable {
-    func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<String>
+    func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<StreamEvent>
 }
 
 public enum StreamParse {
@@ -21,7 +26,7 @@ public enum StreamParse {
 
 public struct OpenRouterTokenStreamer: TokenStreamer {
     public init() {}
-    public func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<String> {
+    public func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<StreamEvent> {
         AsyncStream { continuation in
             Task {
                 var request = OpenRouterClient.buildRequest(model: model, messages: messages, imagePNG: imagePNG, apiKey: apiKey)
@@ -32,16 +37,16 @@ public struct OpenRouterTokenStreamer: TokenStreamer {
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                     guard status == 200 else {
-                        continuation.yield("[openrouter \(status)] ")
+                        continuation.yield(.failure("OpenRouter request failed (HTTP \(status))."))
                         continuation.finish()
                         return
                     }
                     for try await line in bytes.lines {
-                        for token in StreamParse.tokenDeltas(fromSSELine: line) { continuation.yield(token) }
+                        for token in StreamParse.tokenDeltas(fromSSELine: line) { continuation.yield(.token(token)) }
                     }
                     continuation.finish()
                 } catch {
-                    continuation.yield(" [interrupted — resend to retry]")
+                    continuation.yield(.failure("The response was interrupted. Retry to continue."))
                     continuation.finish()
                 }
             }
@@ -53,10 +58,10 @@ public struct StubTokenStreamer: TokenStreamer {
     public var texts: [String]
     public init(text: String) { self.texts = [text] }
     public init(texts: [String]) { self.texts = texts }
-    public func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<String> {
+    public func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<StreamEvent> {
         let chunks = texts
         return AsyncStream { continuation in
-            for chunk in chunks { continuation.yield(chunk) }
+            for chunk in chunks { continuation.yield(.token(chunk)) }
             continuation.finish()
         }
     }

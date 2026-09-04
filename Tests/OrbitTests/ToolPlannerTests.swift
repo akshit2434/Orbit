@@ -23,10 +23,10 @@ final class ToolPlannerTests: XCTestCase {
             private let lock = NSLock()
             private var captured: Data?
             var image: Data? { lock.withLock { captured } }
-            func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<String> {
+            func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<StreamEvent> {
                 lock.withLock { captured = imagePNG }
                 return AsyncStream { continuation in
-                    continuation.yield("I can see it.")
+                    continuation.yield(.token("I can see it."))
                     continuation.finish()
                 }
             }

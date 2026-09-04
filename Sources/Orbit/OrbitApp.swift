@@ -273,8 +273,11 @@ final class OrbitPanelModel: ObservableObject {
         final class Accumulator: @unchecked Sendable {
             private let lock = NSLock()
             private var chunks: [String] = []
+            private var failureMessage: String?
             func append(_ s: String) { lock.withLock { chunks.append(s) } }
             var value: String { lock.withLock { chunks.joined() } }
+            func fail(_ message: String) { lock.withLock { failureMessage = message } }
+            var failure: String? { lock.withLock { failureMessage } }
         }
         final class ToolAccumulator: @unchecked Sendable {
             private let lock = NSLock()
@@ -312,6 +315,9 @@ final class OrbitPanelModel: ObservableObject {
                 onTools: { bundle, calls in
                     toolAccumulator.set(bundle: bundle, calls: calls)
                 },
+                onFailure: { message in
+                    accumulator.fail(message)
+                },
                 onToken: { token in
                     accumulator.append(token)
                     Task { @MainActor [weak self] in
@@ -329,7 +335,7 @@ final class OrbitPanelModel: ObservableObject {
             await Task.yield()
             guard !Task.isCancelled else { return }
             guard self.answerTask != nil else { return }
-            let reply = accumulator.value
+            let reply = accumulator.failure ?? accumulator.value
             self.streamText = reply
             if self.workStart == nil, !reply.isEmpty {
                 self.workStart = Date()
@@ -371,7 +377,7 @@ final class OrbitPanelModel: ObservableObject {
             self.store.updateTurn(id: turnID, in: threadID) { turn in
                 turn.reply = reply
                 turn.tools = tools
-                turn.status = reply.isEmpty ? .failed : .completed
+                turn.status = accumulator.failure != nil || reply.isEmpty ? .failed : .completed
                 turn.duration = self.completedWorkDuration
                 turn.toolResults = toolResults
             }
@@ -400,6 +406,19 @@ final class OrbitPanelModel: ObservableObject {
         }
         state = .idle
         if mode != .orb { mode = .card }
+    }
+
+    func retry(_ turn: ChatTurn) {
+        guard !isGenerating, turn.status != .completed else { return }
+        let threadID = store.selectedThreadID
+        store.removeTurn(id: turn.id, from: threadID)
+        submit(transcript: turn.transcript, keepCard: true)
+    }
+
+    func remove(_ turn: ChatTurn) {
+        guard !isGenerating || turn.status != .generating else { return }
+        store.removeTurn(id: turn.id, from: store.selectedThreadID)
+        if selectedTurn?.id == turn.id { selectedTurn = nil }
     }
 }
 

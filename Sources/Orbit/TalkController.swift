@@ -116,6 +116,7 @@ public final class TalkSession {
                              attachmentData: @MainActor @Sendable (String) -> Data? = { _ in nil },
                              onHint: @Sendable @escaping (String) -> Void,
                              onTools: @Sendable @escaping (ContextBundle, [PlannedToolCall]) -> Void = { _, _ in },
+                             onFailure: @Sendable @escaping (String) -> Void = { _ in },
                              onToken: @Sendable @escaping (String) -> Void) async {
         let baseMessages = TalkController.messages(
             transcript: transcript, context: ContextBundle(), history: history)
@@ -150,10 +151,15 @@ public final class TalkSession {
            let load = planned.first(where: { $0.name == "load_screenshot" }),
            let path = load.arguments["attachment_path"],
            screenshotPaths.contains(path),
-           let data = attachmentData(path) {
-            bundle.screenshotPNG = data
-            bundle.screenshotStatus = .captured
-            bundle.notes.append("screenshot-loaded")
+           screenshotPaths.contains(path) {
+            if let data = attachmentData(path) {
+                bundle.screenshotPNG = data
+                bundle.screenshotStatus = .captured
+                bundle.notes.append("screenshot-loaded")
+            } else {
+                bundle.screenshotStatus = .unavailable
+                bundle.notes.append("saved-screenshot-unavailable")
+            }
         }
         onTools(bundle, planned)
         if client.config.openRouterKey?.isEmpty != false {
@@ -161,12 +167,15 @@ public final class TalkSession {
             return
         }
         let msgs = TalkController.messages(transcript: transcript, context: bundle, history: history)
-        for await token in streamer.stream(
+        for await event in streamer.stream(
             model: client.config.openRouterModel,
             messages: msgs,
             imagePNG: bundle.screenshotPNG,
             apiKey: client.config.openRouterKey ?? "") {
-            onToken(token)
+            switch event {
+            case let .token(token): onToken(token)
+            case let .failure(message): onFailure(message)
+            }
         }
     }
 }

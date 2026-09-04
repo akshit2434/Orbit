@@ -4,16 +4,44 @@ import XCTest
 @MainActor
 final class ChatModelTests: XCTestCase {
     private struct SlowStreamer: TokenStreamer {
-        func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<String> {
+        func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<StreamEvent> {
             AsyncStream { continuation in
                 Task {
                     try? await Task.sleep(for: .milliseconds(250))
                     guard !Task.isCancelled else { return }
-                    continuation.yield("done")
+                    continuation.yield(.token("done"))
                     continuation.finish()
                 }
             }
         }
+    }
+
+    private struct FailingStreamer: TokenStreamer {
+        func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<StreamEvent> {
+            AsyncStream { continuation in
+                continuation.yield(.failure("Network unavailable."))
+                continuation.finish()
+            }
+        }
+    }
+
+    func testStreamFailureIsExcludedFromModelHistoryAndCanBeRemoved() async {
+        let svc = ContextService()
+        let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: "key", openRouterModel: "m"))
+        let model = OrbitPanelModel(
+            isMockVoice: true,
+            context: svc,
+            talk: TalkSession(context: svc, client: client, streamer: FailingStreamer(), planner: StubToolPlanner(calls: [])),
+            voice: MockVoiceSession())
+        model.submit(transcript: "fail", keepCard: true)
+        try? await Task.sleep(for: .milliseconds(100))
+        let failed = model.store.turns.first
+        XCTAssertEqual(failed?.status, .failed)
+        XCTAssertEqual(failed?.reply, "Network unavailable.")
+        let messages = TalkController.messages(transcript: "next", context: ContextBundle(), history: Array(model.store.turns.reversed()))
+        XCTAssertFalse(messages.contains(where: { $0["content"] == "Network unavailable." }))
+        if let failed { model.remove(failed) }
+        XCTAssertTrue(model.store.turns.isEmpty)
     }
 
     func testDuplicateSendIsBlockedAndStopMarksTurnCancelled() async {

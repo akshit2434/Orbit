@@ -109,7 +109,9 @@ public final class ChatStore: ObservableObject, ChatStoring {
 
     public func removeTurn(id: UUID, from threadID: UUID) {
         guard let index = threads.firstIndex(where: { $0.id == threadID }) else { return }
+        let paths = threads[index].turns.first(where: { $0.id == id })?.toolResults.compactMap(\.attachmentPath) ?? []
         threads[index].turns.removeAll(where: { $0.id == id })
+        removeAttachments(paths)
         objectWillChange.send()
         save()
     }
@@ -134,7 +136,9 @@ public final class ChatStore: ObservableObject, ChatStoring {
     }
     public func clear() {
         guard let index = threads.firstIndex(where: { $0.id == selectedThreadID }) else { return }
+        let paths = threads[index].turns.flatMap(\.toolResults).compactMap(\.attachmentPath)
         threads[index].turns.removeAll()
+        removeAttachments(paths)
         objectWillChange.send()
         save()
     }
@@ -150,6 +154,13 @@ public final class ChatStore: ObservableObject, ChatStoring {
             try data.write(to: storageURL, options: .atomic)
         } catch {
             NSLog("Orbit chat persistence failed: %@", error.localizedDescription)
+        }
+    }
+
+    private func removeAttachments(_ paths: [String]) {
+        guard let root = storageURL?.deletingLastPathComponent() else { return }
+        for path in paths where !path.hasPrefix("/") && !path.contains("..") {
+            try? FileManager.default.removeItem(at: root.appendingPathComponent(path))
         }
     }
 }
