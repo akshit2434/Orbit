@@ -3,7 +3,25 @@ import Combine
 import SwiftUI
 
 private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    var hoverChanged: ((Bool) -> Void)?
+    private var hoverTrackingArea: NSTrackingArea?
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil)
+        addTrackingArea(area)
+        hoverTrackingArea = area
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) { hoverChanged?(true) }
+    override func mouseExited(with event: NSEvent) { hoverChanged?(false) }
 }
 
 @MainActor
@@ -27,12 +45,20 @@ final class FloatingSurfaceCoordinator {
         surfacePanel = Self.makePanel(size: surfaceSize(.voice))
         historyPanel = Self.makePanel(size: NSSize(width: 36, height: 36), keyCapable: false)
 
-        orbPanel.contentView = FirstMouseHostingView(
+        let orbView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .orb))
+        orbView.hoverChanged = { [weak model] hovering in
+            model?.setHistoryHover(.orb, hovering)
+        }
+        orbPanel.contentView = orbView
         surfacePanel.contentView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .attached))
-        historyPanel.contentView = FirstMouseHostingView(
+        let historyView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .history))
+        historyView.hoverChanged = { [weak model] hovering in
+            model?.setHistoryHover(.button, hovering)
+        }
+        historyPanel.contentView = historyView
 
         wireModel()
         restoreOrbPosition()
@@ -77,6 +103,11 @@ final class FloatingSurfaceCoordinator {
 
     private func observeMode() {
         model.$mode.removeDuplicates().sink { [weak self] mode in
+            if mode != .orb {
+                self?.model.hideHistoryButton()
+                self?.historyPanel.orderOut(nil)
+                self?.historyPanel.alphaValue = 1
+            }
             self?.updateAttachedSurface(for: mode)
             self?.updateHistoryPanel()
         }.store(in: &cancellables)
