@@ -1,5 +1,7 @@
 # Streaming replies + Enter fix + hints Implementation Plan
 
+> Historical implementation plan. For current behavior, use [Prototype Context](../../prototype-context.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replies stream token-by-token with honest thinking hints, and Enter always gives visible feedback instead of silently collapsing.

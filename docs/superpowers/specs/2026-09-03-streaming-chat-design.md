@@ -1,5 +1,7 @@
 # Streaming replies + history chat — Design (2026-09-03)
 
+> Historical design record. Session-only and capped-history statements below were superseded by persistent, currently uncapped local threads. See [Prototype Context](../../prototype-context.md).
+
 ## Goal
 Turn the orb into a complete voice/text loop: ask from the orb, watch it
 think (with honest hints about what context it is using), read the reply

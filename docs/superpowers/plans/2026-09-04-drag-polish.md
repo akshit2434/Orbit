@@ -1,5 +1,7 @@
 # Drag feel + tiling defense + card polish Implementation Plan
 
+> Historical implementation plan. For the implemented interaction contract, use [Orb UI Style](../../orb-ui-style.md) and [Prototype Context](../../prototype-context.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Orb drag feels 1:1 with fluid throw and edge stickiness, the system tile never wins, and the card UI is opaque, readable, and always shows the trail.

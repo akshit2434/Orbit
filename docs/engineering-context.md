@@ -81,13 +81,13 @@ The repository currently contains a native macOS SwiftUI prototype for Orbit's p
 - Escape cancels the current listening state and Return sends it into the thinking state.
 - The orb can be dragged without triggering activation; stationary clicks activate it.
 - The panel position is persisted relative to the screen edge and restored on relaunch.
-- The prototype uses SwiftUI for rendering and AppKit `NSPanel` for accessory-window behavior and native window dragging.
+- The prototype uses SwiftUI for rendering and coordinated AppKit `NSPanel`s for accessory-window behavior. Orbit applies window movement itself; native movement is disabled to prevent macOS tiling.
 
 The visual and interaction rules for this shell are authoritative in [Orb UI Style](orb-ui-style.md). Keep provider integrations, context collection, and agent routing behind internal abstractions as those slices are added.
 
 ### Panel architecture
 
-The prototype uses a permanently fixed-size orb panel plus a separate attached surface panel for voice, thinking, output, and chat. This keeps drag geometry stable, isolates surface layout and screen clamping, and removes resizing/tiling behavior from the orb window. See [Two-panel floating surface refactor](superpowers/plans/2026-09-04-two-panel-surface-refactor.md).
+The prototype uses three coordinated panels: a permanently fixed 56×56 orb panel, an independently clamped attached panel for voice/thinking/output/chat, and a 36×36 edge-aware history-control panel. This keeps drag geometry stable, prevents attached UI from clipping, and removes resizing/tiling behavior from the orb window. History hover is derived from global pointer geometry with a 500 ms handoff delay and a synchronous reversible animation, rather than relying on enter/exit ordering across windows. The original [two-panel refactor plan](superpowers/plans/2026-09-04-two-panel-surface-refactor.md) is historical context.
 
 ---
 

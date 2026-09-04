@@ -16,13 +16,13 @@ The product vision, architecture, stack, interaction model, priorities, and init
 
 ## Status
 
-Early product and architecture definition. The native floating shell is rebuilt on a single mode enum per the hand sketch (orb → voice pill → thinking bubble → short output → big card with timer, copy, text+mic input, and docked orb); implementation proceeds in vertical slices, beginning with “See + Talk.”
+Working native prototype with the floating-shell, live/mock voice input, model-directed screen and clipboard tools, streaming replies, persistent local threads, explicit generation lifecycle, and three-panel edge-safe UI implemented. Browser control, connected accounts, cloud execution/sync, history compression, and spoken responses remain future slices.
 
 ## Floating surface
 
 The floating shell uses three coordinated native panels: a fixed 56×56 orb panel, an independently sized/clamped panel for voice/thinking/output/chat, and a small hover-only history panel. The orb owns pointer-locked dragging and magnetic edge settling; attached surfaces calculate from its visible footprint and appear toward available screen space. No panel participates in native macOS movement or tiling.
 
-The anchor (`maxX`, `midY`) persists to `anchor.json` under `Application Support/com.akshit2434.orbit` (restored on launch when still on-screen), with `UserDefaults` as fallback. Replies carry a `Worked for Xs` duration that freezes at completion. Thinking, output, card, composer, and history surfaces are opaque white with high-contrast close controls; glass remains reserved for the orb/voice surface. The card uses a compact chat structure: orb/duration header, chronological prompt/reply body with per-response copy controls, and a bottom-pinned composer. History is session-only (newest 50 turns) and renders inside the card.
+The anchor (`maxX`, `midY`) persists to `anchor.json` under `Application Support/com.akshit2434.orbit` (restored on launch when still on-screen), with `UserDefaults` as fallback. Replies carry a `Worked for Xs` duration that freezes at completion. Thinking, output, card, composer, and history surfaces are opaque white with high-contrast close controls; glass remains reserved for the orb/voice surface. The card uses a compact chat structure: orb/duration header, chronological prompt/reply body with per-response copy controls, and a bottom-pinned composer. Threads and their currently uncapped turn histories persist locally.
 
 ## Run the SwiftUI prototype
 
@@ -65,4 +65,6 @@ Threads, selected-thread identity, outcomes, timings, and tool metadata are save
 
 Hover the orb while it is collapsed to reveal a clock button; clicking it opens the history popout. Turns are listed newest-first; selecting one rereads that transcript + reply, with Back returning to the list. The chat card carries an `Ask…` field (Return sends through the same streaming pipeline) plus a mic button to start voice input. Empty Enter never collapses anything: an empty send keeps the surface open.
 
-Turns live in selectable in-memory threads, each capped at the newest 50 turns. The selected thread receives every orb and card prompt until a different thread is selected or a new one is created from the card header. Its chronological recent turns are sent with each model request, so follow-ups have real thread memory. Collapsing the card does not cancel background work; explicit cancel still does. The store sits behind the `ChatStoring` protocol so disk persistence can slot in later.
+The clock uses its own edge-aware panel. A coordinator samples the pointer against the orb and clock frames, keeping the clock present while crossing the gap and dismissing it 0.5 seconds after leaving both. Its fade/scale animation runs from the same synchronous state, avoiding stale cross-window hover events.
+
+Turns live in selectable, locally persisted threads with no current turn cap. The selected thread receives every orb and card prompt until a different thread is selected or a new one is created from the card header. All eligible chronological turns are sent with each model request, so follow-ups have real thread memory. Collapsing the card does not cancel background work; the stop-generating control does. The store remains behind `ChatStoring` as the future cloud-sync boundary.

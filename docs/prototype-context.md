@@ -23,7 +23,7 @@ It does not yet implement spoken responses, browser control, connected accounts,
 ```text
 OrbitApp
   └─ OrbitAppDelegate
-      ├─ fixed orb NSPanel + independently clamped attached-surface NSPanel
+      ├─ fixed orb NSPanel + independently clamped attached-surface and history-control NSPanels
       ├─ position restoration and persistence
       └─ OrbitPanelModel
           ├─ SurfaceMode (orb / voice / thinking / output / card / history) + OrbitState
@@ -45,7 +45,7 @@ The visible orb is 30 px inside a 56 px interaction canvas. It breathes slowly, 
 
 ### Modes
 
-One `SurfaceMode` drives attached content while `FloatingSurfaceCoordinator` owns three windows. The 56×56 orb panel exclusively owns drag/snap persistence. Voice, thinking, output, card, and history render in a separate panel placed from the stable visual-orb footprint by `attachedSurfacePlacement`. The hover history button has its own 36×36 panel and appears on the available side opposite the nearest edge, so it never relies on an out-of-window offset or clips. Preferred-side fallback and final visible-frame containment prevent overflow without moving the orb. Interactive hosting views accept first-mouse events.
+One `SurfaceMode` drives attached content while `FloatingSurfaceCoordinator` owns three windows. The 56×56 orb panel exclusively owns drag/snap persistence. Voice, thinking, output, card, and history render in a separate panel placed from the stable visual-orb footprint by `attachedSurfacePlacement`. The hover history button has its own 36×36 panel and appears on the available side opposite the nearest edge, so it never relies on an out-of-window offset or clips. Its visibility comes from coordinator polling of the pointer against both screen-space frames, with a 500 ms crossing/dismissal grace period and a synchronous reversible fade/scale animation; cross-window hover events and Combine presentation replay are deliberately avoided. Preferred-side fallback and final visible-frame containment prevent overflow without moving the orb. Interactive hosting views accept first-mouse events.
 
 ### Listening
 
@@ -53,7 +53,7 @@ A stationary click expands the native panel before the visual capsule appears. T
 
 ### Thinking
 
-Send stops microphone capture, collapses the surface, and moves the orb to the thinking color and stronger breathing treatment. `OrbitPanelModel.submit(transcript:)` then streams `TalkSession.answerStream(transcript:history:onHint:onToken)` on a cancellable task: tool hints land in `hintText` (one line naming the fired tools), tokens accumulate in `streamText` (chat card under the collapsed capsule), and the orb returns to idle at completion. Each request carries the last 6 stored turns (`TalkController.messages`) so follow-ups resolve from history. When no key is configured the stream yields the stub reply as a single token. Escape cancels the task and clears the card; closing the card mid-stream cancels and drops late tokens.
+Send stops microphone capture and moves the orb to the thinking color and stronger breathing treatment. `OrbitPanelModel.submit(transcript:)` then streams `TalkSession.answerStream(transcript:history:onHint:onToken)` on a cancellable task: tool hints land in `hintText`, tokens accumulate in `streamText`, and the orb returns to idle at completion. Each request carries all eligible completed turns from the selected thread so follow-ups resolve from real persisted history. When no key is configured the stream yields the stub reply as a single token. Collapsing a surface preserves active work; the explicit stop-generating control cancels it and records the turn as cancelled.
 
 Empty input never collapses the surface: `send()` with a blank field keeps the orb expanded and opens the chat card instead, and `submit` ignores blank transcripts outright (the Enter fix).
 
@@ -81,7 +81,7 @@ Thinking and output bubbles sit 4 pt from the orb. Non-orb dialogue surfaces are
 - A thread accepts only one generation at a time. Submission immediately creates a `.generating` turn and starts its timer; collapse and orb activation preserve work, while Stop records `.cancelled`. Failed/cancelled/interrupted turns provide Retry/Remove and never enter model memory.
 - All panel frame writes pass through `containedPanelFrame`, including launch restoration, mode resize, live drag, release projection, edge snap, and delayed reassert. Tests cover every surface mode at all four off-screen corner requests on a non-zero-origin display.
 - `OpenRouterClient.complete(transcript:context:)` builds the prompt only from the collected bundle (front-app name, pasted text, clipboard, screenshot flag) and falls back to the stub reply when no key is configured. API keys never appear in logs, replies, or diffs.
-- Long-running work should have task IDs, parent/child relationships, cancellation, and observable progress from the beginning. (Today: the answer `Task` is cancellable on Escape/activate; deeper task tracking is still owed.)
+- Long-running work should have task IDs, parent/child relationships, cancellation, and observable progress from the beginning. Today, one cancellable generation may run per thread, with explicit stop and persisted outcome state; deeper task tracking is still owed.
 
 The orb renderer remains provider-independent. AssemblyAI and OpenRouter are integrations behind `VoiceSession` / `OpenRouterClient`, not assumptions the view layer knows about.
 

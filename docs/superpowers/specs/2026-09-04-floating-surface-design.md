@@ -1,5 +1,7 @@
 # Floating surface rebuild — Design (2026-09-04)
 
+> Historical design record. The current implementation uses three coordinated panels; see [Prototype Context](../../prototype-context.md) and [Orb UI Style](../../orb-ui-style.md).
+
 Target UI is the hand sketch: orb → voice pill → thinking bubble with
 tool updates → short output with close → click expands big card (timer,
 copy, text+mic input, orb docked at edge). Full ChatGPT-like window

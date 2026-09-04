@@ -1,5 +1,7 @@
 # See + Talk — Design (2026-09-03)
 
+> Historical design record. For implemented behavior, use [Prototype Context](../../prototype-context.md) and [Orb UI Style](../../orb-ui-style.md).
+
 ## Goal
 First functional vertical slice: user clicks orb, speaks or injects text, Orbit uses explicitly-gated local context and returns a text reply. Validates persistent-shell + tool-gated context + provider-independent voice without building full duplex audio, browser control, or cloud execution.
 

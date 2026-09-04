@@ -40,6 +40,7 @@ This document is the visual and interaction contract for Orbit's primary floatin
 One `SurfaceMode` drives view, panel size, and placement. Panel sizes (points):
 
 - The orb panel is permanently 56×56. Non-orb modes render in a separate attached panel, and the hover history control renders in its own 36×36 panel; mode changes never resize the orb window.
+- History visibility is derived synchronously from the pointer's screen position against the orb and history-panel frames. It remains visible while crossing between them, dismisses 500 ms after leaving both, and uses a reversible coordinator-driven fade/scale animation. Separate-window enter/exit events must not own this state.
 
 - orb 56×56, history control 36×36, voice 218×76, thinking 250×80, output 250×120, card 320×400, history 320×400.
 - The card content view is card outer 296 (content 272 after padding) + 12pt trailing inset = 308 within the 320pt panel; height content-driven ≤400 (reply scroll capped at 140, history list at 90, orb docked at the edge).
@@ -70,7 +71,7 @@ One `SurfaceMode` drives view, panel size, and placement. Panel sizes (points):
 - Live tool phrases until the first token, then a `Worked for Xs` timer (minutes past 60 s) ticking each second from the first streamed token.
 - Copy button writes the reply to `NSPasteboard` and does nothing when the reply is empty (never clears the pasteboard for nothing).
 - Text `Ask…` field plus mic button send through the same streaming pipeline; empty Enter never collapses anything.
-- Close cross plus Escape return to the orb; closing mid-stream cancels and drops late tokens.
+- Close cross plus Escape return to the orb without cancelling active generation; cancellation belongs to the explicit stop-generating control.
 - Thinking, output, card, input, and history surfaces are opaque white with dark text, a hairline dark border, and a soft shadow. Translucent glass is reserved for the orb/voice surface.
 - Close controls use a black circular background with a white cross and remain inside or intentionally overlap their owning surface.
 - Expanding a completed output shows the current user prompt and assistant response as one dialogue turn. Earlier turns remain available below as complete prompt/response pairs; the composer is visually separate.

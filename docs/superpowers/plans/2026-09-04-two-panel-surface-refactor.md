@@ -1,5 +1,7 @@
 # Two-panel floating surface refactor
 
+> Historical implementation plan. The implemented system subsequently added a third edge-aware history-control panel and persistent local threads. See [Prototype Context](../../prototype-context.md).
+
 ## Goal
 
 Replace the timing-sensitive, dynamically resized panel with two coordinated native panels:

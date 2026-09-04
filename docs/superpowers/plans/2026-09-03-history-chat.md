@@ -1,5 +1,7 @@
 # History store + chat popout + live E2E Implementation Plan
 
+> Historical implementation plan. Session-only storage, 50-turn caps, and the original hover mechanism below are superseded. See [Prototype Context](../../prototype-context.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Hovering the orb reveals a history button that opens past turns in the attached chat card, backed by a session-only store, proven by up to ~10 live conversations including memory references.
