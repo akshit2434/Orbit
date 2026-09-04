@@ -276,7 +276,19 @@ final class OrbitPanelModel: ObservableObject {
             func append(_ s: String) { lock.withLock { chunks.append(s) } }
             var value: String { lock.withLock { chunks.joined() } }
         }
+        final class ToolAccumulator: @unchecked Sendable {
+            private let lock = NSLock()
+            private var storedBundle = ContextBundle()
+            private var storedCalls: [PlannedToolCall] = []
+            func set(bundle: ContextBundle, calls: [PlannedToolCall]) {
+                lock.withLock { storedBundle = bundle; storedCalls = calls }
+            }
+            var value: (ContextBundle, [PlannedToolCall]) {
+                lock.withLock { (storedBundle, storedCalls) }
+            }
+        }
         let accumulator = Accumulator()
+        let toolAccumulator = ToolAccumulator()
         let threadID = store.selectedThreadID
         let history = Array(store.turns.reversed())
         let turnID = UUID()
@@ -289,12 +301,16 @@ final class OrbitPanelModel: ObservableObject {
             await self.talk.answerStream(
                 transcript: text,
                 history: history,
+                attachmentData: { [weak self] path in self?.store.attachmentData(at: path) },
                 onHint: { hint in
                     Task { @MainActor [weak self] in
                         guard let self else { return }
                         guard self.answerTask != nil else { return }
                         self.hintText = hint
                     }
+                },
+                onTools: { bundle, calls in
+                    toolAccumulator.set(bundle: bundle, calls: calls)
                 },
                 onToken: { token in
                     accumulator.append(token)
@@ -321,17 +337,43 @@ final class OrbitPanelModel: ObservableObject {
             self.hintText = nil
             self.completedWorkDuration = max(
                 1, self.workStart.map { Date().timeIntervalSince($0) } ?? 1)
-            let fired = TalkController.selectTools(
-                transcript: text,
-                hasPaste: !self.context.pastedText.isEmpty,
-                clipboardAllowed: self.context.clipboardAllowed
-            )
-            let tools = fired.map(\.rawValue).sorted()
+            let (bundle, calls) = toolAccumulator.value
+            let tools = calls.map(\.name)
+            var toolResults: [ToolResult] = []
+            for call in calls {
+                switch call.name {
+                case "capture_screen":
+                    if let png = bundle.screenshotPNG,
+                       let path = self.store.saveAttachment(png, threadID: threadID, turnID: turnID) {
+                        toolResults.append(ToolResult(
+                            kind: .screenshot, status: .success,
+                            text: "Screen captured successfully.", attachmentPath: path))
+                    } else {
+                        let message = bundle.screenshotStatus == .permissionDenied
+                            ? "Screen capture failed because Screen Recording permission was denied."
+                            : "Screen capture failed because the display was unavailable."
+                        toolResults.append(ToolResult(kind: .screenshot, status: .error, text: message))
+                    }
+                case "load_screenshot":
+                    let path = call.arguments["attachment_path"]
+                    toolResults.append(ToolResult(
+                        kind: .screenshot,
+                        status: bundle.screenshotPNG == nil ? .error : .success,
+                        text: bundle.screenshotPNG == nil ? "The saved screenshot could not be loaded." : "Saved screenshot loaded successfully.",
+                        attachmentPath: path))
+                case "read_clipboard", "clipboard":
+                    toolResults.append(ToolResult(
+                        kind: .clipboard, status: .success,
+                        text: bundle.clipboard.map { "Clipboard contents: \($0)" } ?? "The clipboard is empty."))
+                default: break
+                }
+            }
             self.store.updateTurn(id: turnID, in: threadID) { turn in
                 turn.reply = reply
                 turn.tools = tools
                 turn.status = reply.isEmpty ? .failed : .completed
                 turn.duration = self.completedWorkDuration
+                turn.toolResults = toolResults
             }
             self.answerTask = nil
             self.isGenerating = false

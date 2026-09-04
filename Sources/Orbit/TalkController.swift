@@ -74,7 +74,7 @@ public enum TalkController {
 
     public static func messages(transcript: String, context: ContextBundle, history: [ChatTurn]) -> [[String: String]] {
         var msgs = [["role": "system", "content": OpenRouterClient.systemPrompt]]
-        for turn in history.suffix(6) {
+        for turn in history where turn.status == .completed {
             msgs.append(["role": "user", "content": turn.transcript])
             msgs.append(["role": "assistant", "content": turn.reply])
         }
@@ -93,11 +93,13 @@ public final class TalkSession {
     private let context: ContextService
     private let client: OpenRouterClient
     private let streamer: any TokenStreamer
+    private let planner: any ToolPlanning
 
-    public init(context: ContextService, client: OpenRouterClient, streamer: any TokenStreamer = OpenRouterTokenStreamer()) {
+    public init(context: ContextService, client: OpenRouterClient, streamer: any TokenStreamer = OpenRouterTokenStreamer(), planner: any ToolPlanning = OpenRouterToolPlanner()) {
         self.context = context
         self.client = client
         self.streamer = streamer
+        self.planner = planner
     }
 
     public func answer(transcript: String) async -> String {
@@ -111,12 +113,49 @@ public final class TalkSession {
     }
 
     public func answerStream(transcript: String, history: [ChatTurn] = [],
+                             attachmentData: @MainActor @Sendable (String) -> Data? = { _ in nil },
                              onHint: @Sendable @escaping (String) -> Void,
+                             onTools: @Sendable @escaping (ContextBundle, [PlannedToolCall]) -> Void = { _, _ in },
                              onToken: @Sendable @escaping (String) -> Void) async {
-        let tools = TalkController.selectTools(transcript: transcript,
-            hasPaste: !context.pastedText.isEmpty, clipboardAllowed: context.clipboardAllowed)
+        let baseMessages = TalkController.messages(
+            transcript: transcript, context: ContextBundle(), history: history)
+        let screenshotPaths = history.flatMap(\.toolResults).compactMap { result in
+            result.kind == .screenshot && result.status == .success ? result.attachmentPath : nil
+        }
+        let planned: [PlannedToolCall]
+        if client.config.openRouterKey?.isEmpty == false {
+            planned = await planner.plan(
+                model: client.config.openRouterModel,
+                messages: baseMessages,
+                screenshotPaths: screenshotPaths,
+                apiKey: client.config.openRouterKey ?? "")
+        } else {
+            planned = TalkController.selectTools(
+                transcript: transcript,
+                hasPaste: !context.pastedText.isEmpty,
+                clipboardAllowed: context.clipboardAllowed
+            ).map { PlannedToolCall(name: $0 == .screenshot ? "capture_screen" : $0.rawValue) }
+        }
+        var tools = Set<ContextTool>()
+        if planned.contains(where: { $0.name == "capture_screen" }) {
+            tools.formUnion([.screenshot, .activeAppWindow])
+        }
+        if planned.contains(where: { $0.name == "read_clipboard" || $0.name == "clipboard" }) {
+            tools.insert(.clipboard)
+        }
+        if !context.pastedText.isEmpty { tools.insert(.pastedText) }
         for hint in TalkController.hintStrings(for: tools) { onHint(hint) }
-        let bundle = await context.collectForRequest(tools: tools)
+        var bundle = await context.collectForRequest(tools: tools)
+        if bundle.screenshotPNG == nil,
+           let load = planned.first(where: { $0.name == "load_screenshot" }),
+           let path = load.arguments["attachment_path"],
+           screenshotPaths.contains(path),
+           let data = attachmentData(path) {
+            bundle.screenshotPNG = data
+            bundle.screenshotStatus = .captured
+            bundle.notes.append("screenshot-loaded")
+        }
+        onTools(bundle, planned)
         if client.config.openRouterKey?.isEmpty != false {
             onToken(OpenRouterClient.stub(transcript: transcript, context: bundle))
             return

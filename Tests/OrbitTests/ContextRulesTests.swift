@@ -27,10 +27,10 @@ final class ContextRulesTests: XCTestCase {
     }
 
     @MainActor
-    func testCollectClipboardGatedByFlag() {
-        let svc = ContextService()
-        svc.clipboardAllowed = false
-        XCTAssertNil(svc.collect(tools: [.clipboard]).clipboard)
+    func testCollectClipboardOnlyWhenToolRuns() {
+        let svc = ContextService(clipboardProvider: { "copied" })
+        XCTAssertNil(svc.collect(tools: []).clipboard)
+        XCTAssertEqual(svc.collect(tools: [.clipboard]).clipboard, "copied")
     }
 
     @MainActor

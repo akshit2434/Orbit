@@ -20,11 +20,14 @@ public struct ContextBundle: Equatable, Sendable {
 @MainActor
 public final class ContextService {
     public typealias ScreenshotProvider = @MainActor @Sendable () async -> (Data?, ScreenshotStatus)
+    public typealias ClipboardProvider = @MainActor @Sendable () -> String?
     public var pastedText: String = ""
     public var clipboardAllowed: Bool = false
     private let screenshotProvider: ScreenshotProvider?
-    public init(screenshotProvider: ScreenshotProvider? = nil) {
+    private let clipboardProvider: ClipboardProvider?
+    public init(screenshotProvider: ScreenshotProvider? = nil, clipboardProvider: ClipboardProvider? = nil) {
         self.screenshotProvider = screenshotProvider
+        self.clipboardProvider = clipboardProvider
     }
     public func activeApp() -> ActiveAppInfo {
         let app = NSWorkspace.shared.frontmostApplication
@@ -34,7 +37,9 @@ public final class ContextService {
         var b = ContextBundle()
         if tools.contains(.activeAppWindow) { b.app = activeApp() }
         if tools.contains(.pastedText), !pastedText.isEmpty { b.pastedText = pastedText }
-        if tools.contains(.clipboard), clipboardAllowed { b.clipboard = NSPasteboard.general.string(forType: .string) }
+        if tools.contains(.clipboard) {
+            b.clipboard = clipboardProvider?() ?? NSPasteboard.general.string(forType: .string)
+        }
         if tools.contains(.screenshot) { b.notes.append("screenshot-requested") }
         return b
     }

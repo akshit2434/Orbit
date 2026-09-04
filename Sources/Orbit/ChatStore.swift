@@ -113,6 +113,25 @@ public final class ChatStore: ObservableObject, ChatStoring {
         objectWillChange.send()
         save()
     }
+
+    public func saveAttachment(_ data: Data, threadID: UUID, turnID: UUID) -> String? {
+        guard let root = storageURL?.deletingLastPathComponent() else { return nil }
+        let relative = "attachments/\(threadID.uuidString)/\(turnID.uuidString).png"
+        let url = root.appendingPathComponent(relative)
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+            return relative
+        } catch {
+            return nil
+        }
+    }
+
+    public func attachmentData(at relativePath: String) -> Data? {
+        guard let root = storageURL?.deletingLastPathComponent(),
+              !relativePath.hasPrefix("/"), !relativePath.contains("..") else { return nil }
+        return try? Data(contentsOf: root.appendingPathComponent(relativePath))
+    }
     public func clear() {
         guard let index = threads.firstIndex(where: { $0.id == selectedThreadID }) else { return }
         threads[index].turns.removeAll()

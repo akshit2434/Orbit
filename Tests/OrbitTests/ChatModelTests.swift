@@ -22,7 +22,7 @@ final class ChatModelTests: XCTestCase {
         let model = OrbitPanelModel(
             isMockVoice: true,
             context: svc,
-            talk: TalkSession(context: svc, client: client, streamer: SlowStreamer()),
+            talk: TalkSession(context: svc, client: client, streamer: SlowStreamer(), planner: StubToolPlanner(calls: [])),
             voice: MockVoiceSession())
         model.submit(transcript: "first", keepCard: true)
         model.submit(transcript: "second", keepCard: true)
@@ -41,7 +41,7 @@ final class ChatModelTests: XCTestCase {
         let model = OrbitPanelModel(
             isMockVoice: true,
             context: svc,
-            talk: TalkSession(context: svc, client: client, streamer: SlowStreamer()),
+            talk: TalkSession(context: svc, client: client, streamer: SlowStreamer(), planner: StubToolPlanner(calls: [])),
             voice: MockVoiceSession())
         model.submit(transcript: "first")
         model.closeChat()
@@ -102,7 +102,7 @@ final class ChatModelTests: XCTestCase {
         let svc = ContextService()
         let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: "key", openRouterModel: "m"))
         let streamer = StubTokenStreamer(texts: ["a", "b", "c"])
-        let talk = TalkSession(context: svc, client: client, streamer: streamer)
+        let talk = TalkSession(context: svc, client: client, streamer: streamer, planner: StubToolPlanner(calls: []))
         let model = OrbitPanelModel(isMockVoice: true, context: svc,
             talk: talk, voice: MockVoiceSession())
         model.submit(transcript: "ping")
@@ -153,7 +153,7 @@ final class ChatModelTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 500_000_000)
         XCTAssertEqual(model.store.turns.count, 1)
         XCTAssertEqual(model.store.turns.first?.transcript, "what am I looking at?")
-        XCTAssertTrue(model.store.turns.first?.tools.contains("screenshot") ?? false)
+        XCTAssertTrue(model.store.turns.first?.tools.contains("capture_screen") ?? false)
     }
     func testCloseChatCollapsesWithoutCancellingInflightStream() async {
         let svc = ContextService()
