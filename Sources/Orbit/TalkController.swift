@@ -1,22 +1,52 @@
 import Foundation
 
-public struct ChatTurn: Identifiable, Hashable, Sendable {
+public enum TurnStatus: String, Codable, Hashable, Sendable {
+    case completed, failed, cancelled, interrupted
+}
+
+public struct ToolResult: Identifiable, Codable, Hashable, Sendable {
+    public enum Kind: String, Codable, Hashable, Sendable { case screenshot, clipboard }
+    public enum Status: String, Codable, Hashable, Sendable { case success, error }
+    public var id: UUID
+    public var kind: Kind
+    public var status: Status
+    public var text: String?
+    public var attachmentPath: String?
+
+    public init(id: UUID = UUID(), kind: Kind, status: Status, text: String? = nil, attachmentPath: String? = nil) {
+        self.id = id
+        self.kind = kind
+        self.status = status
+        self.text = text
+        self.attachmentPath = attachmentPath
+    }
+}
+
+public struct ChatTurn: Identifiable, Hashable, Codable, Sendable {
     public var id: UUID
     public var transcript: String
     public var reply: String
     public var tools: [String]
-    public init(id: UUID = UUID(), transcript: String, reply: String, tools: [String]) {
+    public var status: TurnStatus
+    public var createdAt: Date
+    public var duration: TimeInterval?
+    public var toolResults: [ToolResult]
+    public init(id: UUID = UUID(), transcript: String, reply: String, tools: [String], status: TurnStatus = .completed, createdAt: Date = Date(), duration: TimeInterval? = nil, toolResults: [ToolResult] = []) {
         self.id = id; self.transcript = transcript; self.reply = reply; self.tools = tools
+        self.status = status; self.createdAt = createdAt; self.duration = duration; self.toolResults = toolResults
     }
 
     public static func == (lhs: ChatTurn, rhs: ChatTurn) -> Bool {
-        lhs.transcript == rhs.transcript && lhs.reply == rhs.reply && lhs.tools == rhs.tools
+        lhs.transcript == rhs.transcript && lhs.reply == rhs.reply && lhs.tools == rhs.tools && lhs.status == rhs.status && lhs.duration == rhs.duration && lhs.toolResults == rhs.toolResults
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(transcript)
         hasher.combine(reply)
         hasher.combine(tools)
+        hasher.combine(status)
+        hasher.combine(duration)
+        hasher.combine(toolResults)
     }
 }
 

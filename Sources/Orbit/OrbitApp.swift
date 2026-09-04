@@ -19,7 +19,7 @@ final class OrbitPanelModel: ObservableObject {
         mode == .thinking || mode == .output || mode == .card || mode == .history
     }
     @Published var selectedTurn: ChatTurn?
-    let store = ChatStore()
+    let store: ChatStore
 
     let microphone = MicrophoneMonitor()
     let context: ContextService
@@ -42,12 +42,14 @@ final class OrbitPanelModel: ObservableObject {
         isMockVoice: Bool? = nil,
         context: ContextService? = nil,
         talk: TalkSession? = nil,
-        voice: (any VoiceSession)? = nil
+        voice: (any VoiceSession)? = nil,
+        store: ChatStore? = nil
     ) {
         let mockFlag = isMockVoice ?? CommandLine.arguments.contains("--mock-voice")
         self.isMockVoice = mockFlag
         let contextService = context ?? ContextService()
         self.context = contextService
+        self.store = store ?? ChatStore()
         let config = EnvLoader.config(
             processEnv: ProcessInfo.processInfo.environment,
             fileEnv: EnvLoader.repoRootEnv()
@@ -335,7 +337,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         static let centerY = "orbit.panel.centerY"
     }
 
-    private let model = OrbitPanelModel()
+    private let model = OrbitPanelModel(store: ChatStore(storageURL: ChatStore.defaultStorageURL))
     private var panel: OrbitPanel?
     private var cancellables = Set<AnyCancellable>()
     private var pendingCollapse: DispatchWorkItem?
