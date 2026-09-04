@@ -207,10 +207,40 @@ final class OrbitPanelModel: ObservableObject {
         let pending = source.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !pending.isEmpty else {
             if isChatMode { return }
+            if !isMockVoice {
+                finishLiveVoice()
+                return
+            }
             mode = .voice
             return
         }
         submit(transcript: pending, keepCard: isChatMode)
+    }
+
+    private func finishLiveVoice() {
+        guard let audio = microphone.finishRecording(), !audio.isEmpty else { return }
+        voice.stop()
+        state = .thinking
+        mode = .thinking
+        hintText = "Transcribing…"
+        answerTask?.cancel()
+        answerTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                guard let transcript = try await self.voice.transcribe(audio: audio),
+                      !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                else {
+                    self.hintText = "No speech detected"
+                    self.answerTask = nil
+                    return
+                }
+                self.answerTask = nil
+                self.submit(transcript: transcript)
+            } catch {
+                self.hintText = "Transcription failed"
+                self.answerTask = nil
+            }
+        }
     }
 
     func submit(transcript: String, keepCard: Bool = false) {
@@ -292,8 +322,9 @@ final class OrbitPanelModel: ObservableObject {
     }
 }
 
-final class OrbitPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
+class OrbitPanel: NSPanel {
+    var permitsKey = true
+    override var canBecomeKey: Bool { permitsKey }
     override var canBecomeMain: Bool { false }
 }
 

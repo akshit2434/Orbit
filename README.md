@@ -20,7 +20,7 @@ Early product and architecture definition. The native floating shell is rebuilt 
 
 ## Floating surface
 
-One `SurfaceMode` drives the view, panel size, and placement: orb 80×92, voice 218×76, thinking 250×80, output 250×120, card/history 320×400. The bubble/card extend toward the screen center from the nearest edge (left/right win ties; 12 pt margin). Dragging is scoped to the orb/voice surface and uses absolute screen pointer coordinates so the orb stays under the original grab point while the panel moves. Release applies a bounded throw before magnetically settling. The panel is not natively movable or main-window-capable, preventing macOS edge tiling from taking over.
+The floating shell uses two coordinated native panels: a permanently fixed 80×92 orb panel and an independently sized/clamped attached panel for voice, thinking, output, card, and history. The orb owns pointer-locked dragging and magnetic edge settling; opening another mode never resizes or re-anchors it. Neither panel participates in native macOS movement or tiling.
 
 The anchor (`maxX`, `midY`) persists to `anchor.json` under `Application Support/com.akshit2434.orbit` (restored on launch when still on-screen), with `UserDefaults` as fallback. Replies carry a `Worked for Xs` duration that freezes at completion. Thinking, output, card, composer, and history surfaces are opaque white with high-contrast close controls; glass remains reserved for the orb/voice surface. The card uses a compact chat structure: orb/duration header, chronological prompt/reply body with per-response copy controls, and a bottom-pinned composer. History is session-only (newest 50 turns) and renders inside the card.
 
@@ -32,7 +32,7 @@ The repository now includes a native macOS SwiftUI interaction prototype. It run
 swift run Orbit
 ```
 
-Click the orb to open its live microphone waveform. Hover the waveform to reveal cancel and send controls; Escape cancels and Return sends. macOS will request microphone access the first time the interaction opens.
+Click the orb to open its live microphone waveform. Hover the waveform to reveal cancel and send controls; Escape cancels and Return sends. In live mode, send finalizes the local WAV recording, transcribes it through AssemblyAI, and submits the transcript. macOS will request microphone access the first time the interaction opens.
 
 ## See + Talk
 
@@ -55,7 +55,7 @@ Copy nothing into the repo; create an untracked `.env.local` at the repo root wi
 
 - `OPENROUTER_API_KEY` — enables live answers via OpenRouter chat completions.
 - `OPENROUTER_MODEL` — model name (default `openai/gpt-4o-mini`).
-- `ASSEMBLYAI_API_KEY` — enables live mic transcription; without it (or with `--mock-voice`) the shell uses `MockVoiceSession`.
+- `ASSEMBLYAI_API_KEY` — enables live mic transcription when the voice send arrow is pressed; `--mock-voice` uses `MockVoiceSession` instead.
 
 Without keys the app still runs: `OpenRouterClient` falls back to a local stub reply (`Heard: … | app: … | screenshot: … | paste: … chars.`) so the whole See + Talk flow is exercisable offline.
 

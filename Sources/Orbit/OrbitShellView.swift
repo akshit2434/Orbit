@@ -62,7 +62,6 @@ struct OrbitOverlayView: View {
             if role == .orb { orbRoot } else { attachedRoot }
         }
         .preferredColorScheme(.light)
-        .allowsWindowActivationEvents()
     }
 
     private var orbRoot: some View {
@@ -74,6 +73,9 @@ struct OrbitOverlayView: View {
                 .simultaneousGesture(panelDragGesture)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: model.mode) { _, mode in
+            if mode != .orb { isHovered = false }
+        }
     }
 
     private var attachedRoot: some View {
@@ -87,6 +89,7 @@ struct OrbitOverlayView: View {
                     surface
                         .frame(width: 190, height: 44)
                 }
+                .onHover { isHovered = $0 }
                 .transition(.blurReplace.combined(with: .opacity))
                 if model.isMockVoice {
                     TextField("mock transcript", text: $model.mockText)
@@ -116,6 +119,7 @@ struct OrbitOverlayView: View {
         .animation(.easeInOut(duration: 0.46), value: model.hintText)
         .animation(.easeInOut(duration: 0.46), value: model.streamText)
         .animation(.easeInOut(duration: 0.46), value: model.store.turns.count)
+        .allowsWindowActivationEvents()
     }
 
     private func updateOrbHover(_ hovering: Bool) {
@@ -150,21 +154,17 @@ struct OrbitOverlayView: View {
     private var outputBubble: some View {
         HStack(spacing: 6) {
             compactCloseButton
-            Button {
-                model.expandToCard()
-            } label: {
-                Text(model.streamText.isEmpty ? (model.hintText ?? "Thinking…") : model.streamText)
-                    .font(.system(size: 10))
-                    .lineLimit(3)
-                    .truncationMode(.tail)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: 170, alignment: .trailing)
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .focusEffectDisabled()
-            .accessibilityLabel("Expand to card")
-            .transition(.blurReplace.combined(with: .opacity))
+            Text(model.streamText.isEmpty ? (model.hintText ?? "Thinking…") : model.streamText)
+                .font(.system(size: 10))
+                .lineLimit(3)
+                .truncationMode(.tail)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: 170, alignment: .trailing)
+                .transition(.blurReplace.combined(with: .opacity))
+                .contentShape(Rectangle())
+                .onTapGesture { model.expandToCard() }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel("Expand to card")
         }
         .padding(6)
         .background(.white, in: RoundedRectangle(cornerRadius: 12))
@@ -353,17 +353,27 @@ struct OrbitOverlayView: View {
         .focusEffectDisabled()
         .accessibilityLabel("Show history")
         .onHover { hovering in
-            if hovering {
-                historyHideTask?.cancel()
-                isHovered = true
-            }
+            updateHistoryHover(hovering)
         }
-        .opacity(isHovered && !model.isExpanded ? 1 : 0)
-        .scaleEffect(isHovered && !model.isExpanded ? 1 : 0.8)
-        .offset(x: isHovered && !model.isExpanded ? -30 : 0)
-        .allowsHitTesting(isHovered && !model.isExpanded)
+        .opacity(isHovered && model.mode == .orb ? 1 : 0)
+        .scaleEffect(isHovered && model.mode == .orb ? 1 : 0.8)
+        .offset(x: isHovered && model.mode == .orb ? -30 : 0)
+        .allowsHitTesting(isHovered && model.mode == .orb)
         .animation(.easeOut(duration: 0.1), value: isHovered)
         .animation(.smooth(duration: 0.22), value: model.isExpanded)
+    }
+
+    private func updateHistoryHover(_ hovering: Bool) {
+        historyHideTask?.cancel()
+        if hovering {
+            isHovered = true
+        } else {
+            historyHideTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                isHovered = false
+            }
+        }
     }
 
     private var cardInputRow: some View {
@@ -436,7 +446,6 @@ struct OrbitOverlayView: View {
             .allowsHitTesting(!model.isExpanded)
         }
         .animation(.smooth(duration: 0.22), value: model.isExpanded)
-        .simultaneousGesture(panelDragGesture)
     }
 
     private var panelDragGesture: some Gesture {

@@ -85,9 +85,9 @@ The repository currently contains a native macOS SwiftUI prototype for Orbit's p
 
 The visual and interaction rules for this shell are authoritative in [Orb UI Style](orb-ui-style.md). Keep provider integrations, context collection, and agent routing behind internal abstractions as those slices are added.
 
-### Planned panel architecture
+### Panel architecture
 
-The current prototype uses one dynamically resized `NSPanel`. A planned refactor will split this into a permanently fixed-size orb panel plus a separate attached surface panel for voice, thinking, output, and chat. This keeps drag geometry stable, isolates surface layout and screen clamping, and removes resizing/tiling behavior from the orb window. See [Two-panel floating surface refactor](superpowers/plans/2026-09-04-two-panel-surface-refactor.md).
+The prototype uses a permanently fixed-size orb panel plus a separate attached surface panel for voice, thinking, output, and chat. This keeps drag geometry stable, isolates surface layout and screen clamping, and removes resizing/tiling behavior from the orb window. See [Two-panel floating surface refactor](superpowers/plans/2026-09-04-two-panel-surface-refactor.md).
 
 ---
 

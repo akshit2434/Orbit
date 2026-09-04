@@ -23,7 +23,7 @@ It does not yet implement spoken responses, browser control, connected accounts,
 ```text
 OrbitApp
   └─ OrbitAppDelegate
-      ├─ accessory NSPanel
+      ├─ fixed orb NSPanel + independently clamped attached-surface NSPanel
       ├─ position restoration and persistence
       └─ OrbitPanelModel
           ├─ SurfaceMode (orb / voice / thinking / output / card / history) + OrbitState
@@ -45,7 +45,7 @@ The visible orb is 30 px inside a 56 px interaction canvas. It breathes slowly, 
 
 ### Modes
 
-One `SurfaceMode` drives the view, the panel size, and edge-aware placement (see the locked contract in [Orb UI Style](orb-ui-style.md)): orb 80×92, voice 218×76, thinking 250×80, output 250×120, card/history 320×400. Thinking shows the hint bubble and output shows the short reply bubble (click expands to the card), mirrored by `ExpansionSide` so content extends toward the screen center (bubble-left only on `.left`, otherwise orb-left/bubble-right); card and history share the big card with the `Worked for Xs` timer, copy button, `Ask…` + mic input row, orb docked at the edge, and the session history list. The bubble/card extend toward the screen center based on the nearest edge (left/right win ties); above/below placement clamps x on-screen and all placements clamp y on-screen (12 pt margin, oversize-safe). Dragging moves the panel live and releases with a ~0.35 s magnetic snap to the nearest edge (12 pt margin); the anchor persists to `anchor.json` under `Application Support/com.akshit2434.orbit` only after the snap completes. The retired `resultText` property is removed; one `orbit: mode=` log line stays until headed confirm.
+One `SurfaceMode` drives attached content while `FloatingSurfaceCoordinator` owns two windows. The orb panel remains 80×92 in every mode and exclusively owns drag/snap persistence. Voice, thinking, output, card, and history render in a separate panel placed from the stable orb anchor by `attachedSurfacePlacement`; preferred-side fallback and final visible-frame containment prevent overflow without moving the orb. The attached hosting view accepts first-mouse events so output and voice controls work on the first click.
 
 ### Listening
 
@@ -57,9 +57,9 @@ Send stops microphone capture, collapses the surface, and moves the orb to the t
 
 Empty input never collapses the surface: `send()` with a blank field keeps the orb expanded and opens the chat card instead, and `submit` ignores blank transcripts outright (the Enter fix).
 
-### Mock voice
+### Live and mock voice
 
-Launched with `--mock-voice`, the model uses `MockVoiceSession` and shows a text inject field while expanded (Return submits). This exercises the full Think → answer → result path without microphone or network keys.
+In live mode, `MicrophoneMonitor` writes the same input tap used by the waveform to a temporary WAV. Pressing send finalizes that file, `AssemblyAISTTSession` transcribes it, and the transcript enters the normal thread-aware answer pipeline. Launched with `--mock-voice`, the model uses `MockVoiceSession` and shows a text inject field while expanded (Return submits).
 
 ### Input precedence
 
@@ -98,7 +98,7 @@ The first listening interaction may prompt for microphone access. The current ve
 
 ## Next vertical slice
 
-Before further visual polish, refactor the floating shell from one dynamically resized panel into two coordinated panels: a stable orb panel and an independently clamped attached-surface panel. The implementation plan is [Two-panel floating surface refactor](superpowers/plans/2026-09-04-two-panel-surface-refactor.md).
+The two-panel floating-surface refactor is implemented; the original implementation plan remains at [Two-panel floating surface refactor](superpowers/plans/2026-09-04-two-panel-surface-refactor.md).
 
 Live microphone → `AssemblyAISTTSession.transcribeWAV` wiring is explicitly the next slice, not this merge: this merge covers the mock voice session plus the offline OpenRouter stub path only, with the real STT/LLM calls present but unwired to live mic audio. The next slice hooks captured WAV bytes to `transcribeWAV` and exercises the keyed path end to end.
 

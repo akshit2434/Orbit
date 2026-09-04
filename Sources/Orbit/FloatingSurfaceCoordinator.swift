@@ -2,6 +2,10 @@ import AppKit
 import Combine
 import SwiftUI
 
+private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 @MainActor
 final class FloatingSurfaceCoordinator {
     private enum PositionKey {
@@ -18,12 +22,12 @@ final class FloatingSurfaceCoordinator {
 
     init(model: OrbitPanelModel) {
         self.model = model
-        orbPanel = Self.makePanel(size: surfaceSize(.orb))
+        orbPanel = Self.makePanel(size: surfaceSize(.orb), keyCapable: false)
         surfacePanel = Self.makePanel(size: surfaceSize(.voice))
 
         orbPanel.contentView = NSHostingView(
             rootView: OrbitOverlayView(model: model, role: .orb))
-        surfacePanel.contentView = NSHostingView(
+        surfacePanel.contentView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .attached))
 
         wireModel()
@@ -34,12 +38,13 @@ final class FloatingSurfaceCoordinator {
         updateAttachedSurface(for: model.mode)
     }
 
-    private static func makePanel(size: NSSize) -> OrbitPanel {
+    private static func makePanel(size: NSSize, keyCapable: Bool = true) -> OrbitPanel {
         let panel = OrbitPanel(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false)
+        panel.permitsKey = keyCapable
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -114,7 +119,7 @@ final class FloatingSurfaceCoordinator {
         surfacePanel.contentView?.needsLayout = true
         surfacePanel.contentView?.layoutSubtreeIfNeeded()
         surfacePanel.orderFrontRegardless()
-        if mode == .card || mode == .history { surfacePanel.makeKey() }
+        surfacePanel.makeKey()
     }
 
     private func move(toCursor cursor: NSPoint) {

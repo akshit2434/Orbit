@@ -72,7 +72,11 @@ public final class AssemblyAISTTSession: VoiceSession {
     public func start() {}
     public func stop() {}
 
-    public func transcribeWAV(_ wav: Data) async throws -> String {
+    @MainActor public func transcribe(audio: Data) async throws -> String? {
+        try await transcribeWAV(audio)
+    }
+
+    @MainActor public func transcribeWAV(_ wav: Data) async throws -> String {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
             onError?("missing AssemblyAI key")
@@ -84,7 +88,7 @@ public final class AssemblyAISTTSession: VoiceSession {
         return try await poll(transcriptID: transcriptID, key: key)
     }
 
-    private func upload(wav: Data, key: String) async throws -> String {
+    @MainActor private func upload(wav: Data, key: String) async throws -> String {
         let request = AssemblyAI.buildUploadRequest(data: wav, apiKey: key)
         let (data, response): (Data, URLResponse)
         do {
@@ -101,7 +105,7 @@ public final class AssemblyAISTTSession: VoiceSession {
         return decoded.upload_url
     }
 
-    private func requestTranscript(audioURL: String, key: String) async throws -> String {
+    @MainActor private func requestTranscript(audioURL: String, key: String) async throws -> String {
         let request = AssemblyAI.buildTranscriptRequest(audioURL: audioURL, apiKey: key)
         let (data, response): (Data, URLResponse)
         do {
@@ -130,7 +134,7 @@ public final class AssemblyAISTTSession: VoiceSession {
         }
     }
 
-    private func poll(transcriptID: String, key: String) async throws -> String {
+    @MainActor private func poll(transcriptID: String, key: String) async throws -> String {
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 1_000_000_000)
             let request = AssemblyAI.buildPollRequest(transcriptID: transcriptID, apiKey: key)

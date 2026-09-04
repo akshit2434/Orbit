@@ -6,6 +6,7 @@ public protocol VoiceSession: AnyObject {
     var onLevel: ((Double) -> Void)? { get set }
     var onFinalTranscript: ((String) -> Void)? { get set }
     var onError: ((String) -> Void)? { get set }
+    @MainActor func transcribe(audio: Data) async throws -> String?
 }
 
 public final class MockVoiceSession: VoiceSession {
@@ -16,6 +17,7 @@ public final class MockVoiceSession: VoiceSession {
     public init() {}
     public func start() { started = true }
     public func stop() { started = false }
+    @MainActor public func transcribe(audio: Data) async throws -> String? { nil }
     public func inject(transcript: String) {
         guard started else { return }
         onFinalTranscript?(transcript)

@@ -2,12 +2,22 @@ import AVFoundation
 import Foundation
 import SwiftUI
 
+private final class AudioRecordingSink: @unchecked Sendable {
+    private let lock = NSLock()
+    private var file: AVAudioFile?
+
+    func setFile(_ file: AVAudioFile?) { lock.withLock { self.file = file } }
+    func write(_ buffer: AVAudioPCMBuffer) { lock.withLock { try? file?.write(from: buffer) } }
+}
+
 @MainActor
 final class MicrophoneMonitor: ObservableObject {
     @Published private(set) var levels = Array(repeating: CGFloat(0.04), count: 28)
 
     private let engine = AVAudioEngine()
     private var tapInstalled = false
+    private let recordingSink = AudioRecordingSink()
+    private var recordingURL: URL?
 
     func start() {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
@@ -29,6 +39,15 @@ final class MicrophoneMonitor: ObservableObject {
         levels = Array(repeating: CGFloat(0.04), count: levels.count)
     }
 
+    func finishRecording() -> Data? {
+        engine.pause()
+        recordingSink.setFile(nil)
+        guard let url = recordingURL else { return nil }
+        recordingURL = nil
+        defer { try? FileManager.default.removeItem(at: url) }
+        return try? Data(contentsOf: url)
+    }
+
     private func startEngine() {
         guard !engine.isRunning else { return }
 
@@ -36,12 +55,18 @@ final class MicrophoneMonitor: ObservableObject {
         let format = inputNode.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { return }
 
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("wav")
+        recordingURL = url
+        recordingSink.setFile(try? AVAudioFile(forWriting: url, settings: format.settings))
+
         if !tapInstalled {
             inputNode.installTap(
                 onBus: 0,
                 bufferSize: 1_024,
                 format: format,
-                block: Self.makeTapBlock(monitor: self)
+                block: Self.makeTapBlock(monitor: self, recordingSink: recordingSink)
             )
             tapInstalled = true
         }
@@ -65,12 +90,14 @@ final class MicrophoneMonitor: ObservableObject {
     }
 
     nonisolated private static func makeTapBlock(
-        monitor: MicrophoneMonitor
+        monitor: MicrophoneMonitor,
+        recordingSink: AudioRecordingSink
     ) -> AVAudioNodeTapBlock {
         { [weak monitor] buffer, _ in
             guard let samples = buffer.floatChannelData?.pointee else { return }
             let level = normalizedLevel(samples: samples, count: Int(buffer.frameLength))
 
+            recordingSink.write(buffer)
             Task { @MainActor [weak monitor] in
                 monitor?.append(level)
             }
