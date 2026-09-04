@@ -93,6 +93,7 @@ final class OrbitPanelModel: ObservableObject {
         dragResetWorkItem?.cancel()
         reassertWorkItem?.cancel()
         reassertWorkItem = nil
+        if !isDragging { hideHistoryButton() }
         isDragging = true
         let last = lastDragTranslation ?? .zero
         let delta = CGSize(
@@ -119,6 +120,7 @@ final class OrbitPanelModel: ObservableObject {
         dragResetWorkItem?.cancel()
         reassertWorkItem?.cancel()
         reassertWorkItem = nil
+        if !isDragging { hideHistoryButton() }
         isDragging = true
         dragSamples.append(DragSample(point: cursor, at: timestamp))
         if dragSamples.count > 10 { dragSamples.removeFirst(dragSamples.count - 10) }
@@ -191,6 +193,10 @@ final class OrbitPanelModel: ObservableObject {
     }
 
     func setHistoryHover(_ source: HistoryHoverSource, _ hovering: Bool) {
+        guard !isDragging else {
+            hideHistoryButton()
+            return
+        }
         historyHideTask?.cancel()
         if hovering {
             historyHoverSources.insert(source)

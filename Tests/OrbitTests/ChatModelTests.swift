@@ -17,6 +17,17 @@ final class ChatModelTests: XCTestCase {
         try? await Task.sleep(for: .milliseconds(550))
         XCTAssertFalse(model.historyVisible)
     }
+
+    func testDraggingClearsAndSuppressesHistoryHover() {
+        let model = OrbitPanelModel(isMockVoice: true, voice: MockVoiceSession())
+        model.setHistoryHover(.orb, true)
+        XCTAssertTrue(model.historyVisible)
+        model.drag(cursor: .zero, at: 1)
+        XCTAssertFalse(model.historyVisible)
+        model.setHistoryHover(.button, true)
+        XCTAssertFalse(model.historyVisible)
+        model.endCursorDrag()
+    }
     private struct SlowStreamer: TokenStreamer {
         func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<StreamEvent> {
             AsyncStream { continuation in

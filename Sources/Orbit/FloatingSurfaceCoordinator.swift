@@ -27,7 +27,7 @@ final class FloatingSurfaceCoordinator {
         surfacePanel = Self.makePanel(size: surfaceSize(.voice))
         historyPanel = Self.makePanel(size: NSSize(width: 36, height: 36), keyCapable: false)
 
-        orbPanel.contentView = NSHostingView(
+        orbPanel.contentView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .orb))
         surfacePanel.contentView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .attached))
@@ -60,6 +60,7 @@ final class FloatingSurfaceCoordinator {
         panel.isMovable = false
         panel.isFloatingPanel = true
         panel.animationBehavior = .none
+        panel.acceptsMouseMovedEvents = true
         panel.collectionBehavior = [
             .canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle
         ]
