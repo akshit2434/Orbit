@@ -3,13 +3,18 @@ import Combine
 import SwiftUI
 
 private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
-    var hoverChanged: ((Bool) -> Void)?
+    var hoverChanged: ((Bool) -> Void)? {
+        didSet { updateTrackingAreas() }
+    }
     private var hoverTrackingArea: NSTrackingArea?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func updateTrackingAreas() {
+        super.updateTrackingAreas()
         if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        hoverTrackingArea = nil
+        guard hoverChanged != nil else { return }
         let area = NSTrackingArea(
             rect: bounds,
             options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
@@ -17,11 +22,16 @@ private final class FirstMouseHostingView<Content: View>: NSHostingView<Content>
             userInfo: nil)
         addTrackingArea(area)
         hoverTrackingArea = area
-        super.updateTrackingAreas()
     }
 
-    override func mouseEntered(with event: NSEvent) { hoverChanged?(true) }
-    override func mouseExited(with event: NSEvent) { hoverChanged?(false) }
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        hoverChanged?(true)
+    }
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        hoverChanged?(false)
+    }
 }
 
 @MainActor
@@ -47,18 +57,18 @@ final class FloatingSurfaceCoordinator {
 
         let orbView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .orb))
+        orbPanel.contentView = orbView
         orbView.hoverChanged = { [weak model] hovering in
             model?.setHistoryHover(.orb, hovering)
         }
-        orbPanel.contentView = orbView
         surfacePanel.contentView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .attached))
         let historyView = FirstMouseHostingView(
             rootView: OrbitOverlayView(model: model, role: .history))
+        historyPanel.contentView = historyView
         historyView.hoverChanged = { [weak model] hovering in
             model?.setHistoryHover(.button, hovering)
         }
-        historyPanel.contentView = historyView
 
         wireModel()
         restoreOrbPosition()
