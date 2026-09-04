@@ -3,6 +3,20 @@ import XCTest
 
 @MainActor
 final class ChatModelTests: XCTestCase {
+    func testHistoryHoverSourcesDoNotHideEachOther() async {
+        let model = OrbitPanelModel(isMockVoice: true, voice: MockVoiceSession())
+        model.setHistoryHover(.orb, true)
+        model.setHistoryHover(.button, false)
+        try? await Task.sleep(for: .milliseconds(550))
+        XCTAssertTrue(model.historyVisible)
+        model.setHistoryHover(.orb, false)
+        model.setHistoryHover(.button, true)
+        try? await Task.sleep(for: .milliseconds(550))
+        XCTAssertTrue(model.historyVisible)
+        model.setHistoryHover(.button, false)
+        try? await Task.sleep(for: .milliseconds(550))
+        XCTAssertFalse(model.historyVisible)
+    }
     private struct SlowStreamer: TokenStreamer {
         func stream(model: String, messages: [[String: String]], imagePNG: Data?, apiKey: String) -> AsyncStream<StreamEvent> {
             AsyncStream { continuation in

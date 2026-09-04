@@ -208,13 +208,53 @@ final class FloatingSurfaceCoordinator {
 
     private func updateHistoryPanel() {
         guard model.mode == .orb, model.historyVisible else {
-            historyPanel.orderOut(nil)
+            hideHistoryPanelAnimated()
             return
         }
         let screen = preferredScreen()?.visibleFrame ?? orbPanel.frame
         let anchor = OrbAnchor(center: NSPoint(x: orbPanel.frame.midX, y: orbPanel.frame.midY))
         let side = expansionSide(anchorX: anchor.center.x, anchorY: anchor.center.y, screen: screen)
-        historyPanel.setFrame(historyButtonFrame(anchor: anchor, side: side, screen: screen), display: true)
-        historyPanel.orderFrontRegardless()
+        let frame = historyButtonFrame(anchor: anchor, side: side, screen: screen)
+        if historyPanel.isVisible {
+            historyPanel.setFrame(frame, display: true)
+            historyPanel.alphaValue = 1
+        } else {
+            let start = scaledFrame(frame, scale: 0.82)
+            historyPanel.alphaValue = 0
+            historyPanel.setFrame(start, display: true)
+            historyPanel.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.22
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                historyPanel.animator().alphaValue = 1
+                historyPanel.animator().setFrame(frame, display: true)
+            }
+        }
+    }
+
+    private func hideHistoryPanelAnimated() {
+        guard historyPanel.isVisible, historyPanel.alphaValue > 0 else { return }
+        let end = scaledFrame(historyPanel.frame, scale: 0.82)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            historyPanel.animator().alphaValue = 0
+            historyPanel.animator().setFrame(end, display: true)
+        } completionHandler: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, !self.model.historyVisible else { return }
+                self.historyPanel.orderOut(nil)
+                self.historyPanel.alphaValue = 1
+            }
+        }
+    }
+
+    private func scaledFrame(_ frame: NSRect, scale: CGFloat) -> NSRect {
+        let size = NSSize(width: frame.width * scale, height: frame.height * scale)
+        return NSRect(
+            x: frame.midX - size.width / 2,
+            y: frame.midY - size.height / 2,
+            width: size.width,
+            height: size.height)
     }
 }

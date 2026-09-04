@@ -4,6 +4,7 @@ import SwiftUI
 
 @MainActor
 final class OrbitPanelModel: ObservableObject {
+    enum HistoryHoverSource: Hashable { case orb, button }
     @Published var state: OrbitState = .idle
     @Published var mode: SurfaceMode = .orb
     var isExpanded: Bool { mode == .voice }
@@ -42,6 +43,7 @@ final class OrbitPanelModel: ObservableObject {
     private var dragResetWorkItem: DispatchWorkItem?
     private var toastTask: Task<Void, Never>?
     private var historyHideTask: Task<Void, Never>?
+    private var historyHoverSources = Set<HistoryHoverSource>()
 
     init(
         isMockVoice: Bool? = nil,
@@ -175,7 +177,7 @@ final class OrbitPanelModel: ObservableObject {
     }
 
     func openHistory() {
-        historyVisible = false
+        hideHistoryButton()
         mode = .history
         workStart = nil
         completedWorkDuration = nil
@@ -188,17 +190,27 @@ final class OrbitPanelModel: ObservableObject {
         selectedTurn = nil
     }
 
-    func setHistoryHover(_ hovering: Bool) {
+    func setHistoryHover(_ source: HistoryHoverSource, _ hovering: Bool) {
         historyHideTask?.cancel()
         if hovering {
+            historyHoverSources.insert(source)
             historyVisible = mode == .orb
         } else {
+            historyHoverSources.remove(source)
+            guard historyHoverSources.isEmpty else { return }
             historyHideTask = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(500))
                 guard !Task.isCancelled else { return }
+                guard self?.historyHoverSources.isEmpty == true else { return }
                 self?.historyVisible = false
             }
         }
+    }
+
+    func hideHistoryButton() {
+        historyHideTask?.cancel()
+        historyHoverSources.removeAll()
+        historyVisible = false
     }
 
     func newThread() {

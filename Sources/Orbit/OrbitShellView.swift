@@ -71,14 +71,14 @@ struct OrbitOverlayView: View {
         ZStack {
             MotionOrb(state: model.state, size: 30) { model.activate() }
                 .frame(width: 56, height: 56)
-                .onHover { model.setHistoryHover($0) }
+                .onHover { model.setHistoryHover(.orb, $0) }
                 .simultaneousGesture(panelDragGesture)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: model.mode) { _, mode in
             if mode != .orb {
                 isHovered = false
-                model.historyVisible = false
+                model.hideHistoryButton()
             }
         }
     }
@@ -364,7 +364,7 @@ struct OrbitOverlayView: View {
         .focusable(false)
         .focusEffectDisabled()
         .accessibilityLabel("Show history")
-        .onHover { model.setHistoryHover($0) }
+        .onHover { model.setHistoryHover(.button, $0) }
     }
 
     private var detachedHistoryButton: some View {
