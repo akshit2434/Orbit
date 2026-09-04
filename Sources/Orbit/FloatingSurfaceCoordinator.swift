@@ -22,6 +22,8 @@ final class FloatingSurfaceCoordinator {
     private var snapFrame: NSRect?
     private var hoverTimer: Timer?
     private var lastHistoryHoverAt: Date?
+    private var historyAnimationProgress: CGFloat = 0
+    private var lastHistoryAnimationTick = Date()
 
     init(model: OrbitPanelModel) {
         self.model = model
@@ -90,9 +92,6 @@ final class FloatingSurfaceCoordinator {
             self?.updateAttachedSurface(for: mode)
             self?.updateHistoryPanel()
         }.store(in: &cancellables)
-        model.$historyVisible.removeDuplicates().sink { [weak self] _ in
-            self?.updateHistoryPanel()
-        }.store(in: &cancellables)
     }
 
     private func observeScreens() {
@@ -113,6 +112,7 @@ final class FloatingSurfaceCoordinator {
         guard model.permitsHistoryHover else {
             lastHistoryHoverAt = nil
             model.hideHistoryButton()
+            updateHistoryPanel()
             return
         }
 
@@ -128,12 +128,18 @@ final class FloatingSurfaceCoordinator {
 
         if isHovering {
             lastHistoryHoverAt = now
-            if !model.historyVisible { model.historyVisible = true }
+            setHistoryVisible(true)
         } else if let lastHistoryHoverAt,
                   now.timeIntervalSince(lastHistoryHoverAt) >= 0.5 {
             self.lastHistoryHoverAt = nil
-            model.historyVisible = false
+            setHistoryVisible(false)
         }
+        updateHistoryPanel(now: now)
+    }
+
+    private func setHistoryVisible(_ visible: Bool) {
+        guard model.historyVisible != visible else { return }
+        model.historyVisible = visible
     }
 
     private func preferredScreen(for point: NSPoint? = nil) -> NSScreen? {
@@ -252,55 +258,35 @@ final class FloatingSurfaceCoordinator {
         AnchorStore.save(anchor)
     }
 
-    private func updateHistoryPanel() {
-        guard model.mode == .orb, model.historyVisible else {
-            hideHistoryPanelAnimated()
+    private func updateHistoryPanel(now: Date = Date()) {
+        let shouldShow = model.mode == .orb && model.historyVisible
+        let duration = shouldShow ? 0.22 : 0.18
+        let elapsed = max(0, now.timeIntervalSince(lastHistoryAnimationTick))
+        lastHistoryAnimationTick = now
+        let step = CGFloat(elapsed / duration)
+        historyAnimationProgress = shouldShow
+            ? min(1, historyAnimationProgress + step)
+            : max(0, historyAnimationProgress - step)
+
+        guard historyAnimationProgress > 0 else {
+            historyPanel.orderOut(nil)
             return
         }
         let screen = preferredScreen()?.visibleFrame ?? orbPanel.frame
         let anchor = OrbAnchor(center: NSPoint(x: orbPanel.frame.midX, y: orbPanel.frame.midY))
         let side = expansionSide(anchorX: anchor.center.x, anchorY: anchor.center.y, screen: screen)
         let frame = historyButtonFrame(anchor: anchor, side: side, screen: screen)
-        if historyPanel.isVisible {
-            historyPanel.setFrame(frame, display: true)
-            historyPanel.alphaValue = 1
-        } else {
-            let start = scaledFrame(frame, scale: 0.82)
-            historyPanel.alphaValue = 0
-            historyPanel.setFrame(start, display: true)
-            historyPanel.orderFrontRegardless()
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.22
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                historyPanel.animator().alphaValue = 1
-                historyPanel.animator().setFrame(frame, display: true)
-            }
-        }
-    }
-
-    private func hideHistoryPanelAnimated() {
-        guard historyPanel.isVisible, historyPanel.alphaValue > 0 else { return }
-        let end = scaledFrame(historyPanel.frame, scale: 0.82)
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.18
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            historyPanel.animator().alphaValue = 0
-            historyPanel.animator().setFrame(end, display: true)
-        } completionHandler: { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self, !self.model.historyVisible else { return }
-                self.historyPanel.orderOut(nil)
-                self.historyPanel.alphaValue = 1
-            }
-        }
-    }
-
-    private func scaledFrame(_ frame: NSRect, scale: CGFloat) -> NSRect {
-        let size = NSSize(width: frame.width * scale, height: frame.height * scale)
-        return NSRect(
-            x: frame.midX - size.width / 2,
-            y: frame.midY - size.height / 2,
-            width: size.width,
-            height: size.height)
+        let eased = historyAnimationProgress * historyAnimationProgress
+            * (3 - 2 * historyAnimationProgress)
+        let scale = 0.86 + 0.14 * eased
+        let animatedSize = NSSize(width: frame.width * scale, height: frame.height * scale)
+        let animatedFrame = NSRect(
+            x: frame.midX - animatedSize.width / 2,
+            y: frame.midY - animatedSize.height / 2,
+            width: animatedSize.width,
+            height: animatedSize.height)
+        historyPanel.alphaValue = eased
+        historyPanel.setFrame(animatedFrame, display: true)
+        if !historyPanel.isVisible { historyPanel.orderFrontRegardless() }
     }
 }
