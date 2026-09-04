@@ -45,20 +45,42 @@ enum OrbitState: Equatable {
 }
 
 struct OrbitOverlayView: View {
+    enum Role { case orb, attached }
+
     @ObservedObject var model: OrbitPanelModel
+    let role: Role
     @State private var isHovered = false
     @State private var historyHideTask: Task<Void, Never>?
 
+    init(model: OrbitPanelModel, role: Role = .attached) {
+        self.model = model
+        self.role = role
+    }
+
     var body: some View {
+        Group {
+            if role == .orb { orbRoot } else { attachedRoot }
+        }
+        .preferredColorScheme(.light)
+        .allowsWindowActivationEvents()
+    }
+
+    private var orbRoot: some View {
+        ZStack {
+            historyButton
+            MotionOrb(state: model.state, size: 30) { model.activate() }
+                .frame(width: 56, height: 56)
+                .onHover { updateOrbHover($0) }
+                .simultaneousGesture(panelDragGesture)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var attachedRoot: some View {
         VStack(alignment: .trailing, spacing: 2) {
             switch model.mode {
             case .orb:
-                ZStack(alignment: .trailing) {
-                    historyButton
-                    surface
-                        .frame(width: 56, height: 56)
-                }
-                .transition(.blurReplace.combined(with: .opacity))
+                EmptyView()
             case .voice:
                 ZStack(alignment: .trailing) {
                     historyButton
@@ -77,38 +99,10 @@ struct OrbitOverlayView: View {
                         .accessibilityLabel("Mock transcript inject")
                 }
             case .thinking:
-                Group {
-                    if bubbleLeading(for: model.side) {
-                        HStack(alignment: .center, spacing: 4) {
-                            thinkingBubble
-                            surface
-                                .frame(width: 56, height: 56)
-                        }
-                    } else {
-                        HStack(alignment: .center, spacing: 4) {
-                            surface
-                                .frame(width: 56, height: 56)
-                            thinkingBubble
-                        }
-                    }
-                }
+                thinkingBubble
                 .transition(.blurReplace.combined(with: .opacity))
             case .output:
-                Group {
-                    if bubbleLeading(for: model.side) {
-                        HStack(alignment: .center, spacing: 4) {
-                            outputBubble
-                            surface
-                                .frame(width: 56, height: 56)
-                        }
-                    } else {
-                        HStack(alignment: .center, spacing: 4) {
-                            surface
-                                .frame(width: 56, height: 56)
-                            outputBubble
-                        }
-                    }
-                }
+                outputBubble
                 .transition(.blurReplace.combined(with: .opacity))
             case .card, .history:
                 cardView
@@ -117,13 +111,25 @@ struct OrbitOverlayView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .padding(.trailing, 12)
-        .preferredColorScheme(.light)
         .animation(.easeInOut(duration: 0.46), value: model.mode)
         .animation(.easeInOut(duration: 0.46), value: model.state)
         .animation(.easeInOut(duration: 0.46), value: model.hintText)
         .animation(.easeInOut(duration: 0.46), value: model.streamText)
         .animation(.easeInOut(duration: 0.46), value: model.store.turns.count)
-        .allowsWindowActivationEvents()
+    }
+
+    private func updateOrbHover(_ hovering: Bool) {
+        guard model.mode == .orb else { return }
+        historyHideTask?.cancel()
+        if hovering {
+            isHovered = true
+        } else {
+            historyHideTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                isHovered = false
+            }
+        }
     }
 
     private var thinkingBubble: some View {
@@ -425,19 +431,6 @@ struct OrbitOverlayView: View {
                 model.activate()
             }
             .frame(width: 56, height: 56)
-            .onHover { hovering in
-                guard model.mode == .orb else { return }
-                historyHideTask?.cancel()
-                if hovering {
-                    isHovered = true
-                } else {
-                    historyHideTask = Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(500))
-                        guard !Task.isCancelled else { return }
-                        isHovered = false
-                    }
-                }
-            }
             .opacity(model.isExpanded ? 0 : 1)
             .scaleEffect(model.isExpanded ? 0.78 : 1)
             .allowsHitTesting(!model.isExpanded)

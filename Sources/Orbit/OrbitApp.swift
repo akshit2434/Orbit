@@ -292,7 +292,7 @@ final class OrbitPanelModel: ObservableObject {
     }
 }
 
-private final class OrbitPanel: NSPanel {
+final class OrbitPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }
@@ -309,58 +309,11 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var pendingCollapse: DispatchWorkItem?
     private var pointerGrabOffset: NSPoint?
+    private var surfaceCoordinator: FloatingSurfaceCoordinator?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-
-        let panel = OrbitPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 80, height: 92),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.level = .floating
-        panel.hidesOnDeactivate = false
-        panel.becomesKeyOnlyIfNeeded = false
-        panel.isMovableByWindowBackground = false
-        panel.isMovable = false
-        panel.isFloatingPanel = true
-        panel.animationBehavior = .none
-        panel.collectionBehavior = [
-            .canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle
-        ]
-        panel.contentView = NSHostingView(rootView: OrbitOverlayView(model: model))
-
-        self.panel = panel
-        model.persistPosition = { [weak self] in
-            self?.persistPanelAnchor()
-        }
-        model.movePanelBy = { [weak self] delta in
-            self?.movePanel(by: delta)
-        }
-        model.movePanelToCursor = { [weak self] point in
-            self?.movePanel(toCursor: point)
-        }
-        model.snapPanel = { [weak self] in
-            self?.snapPanelToEdge()
-        }
-        model.reassertPanel = { [weak self] in
-            self?.reassertPanelToSnap()
-        }
-
-        model.$mode
-            .removeDuplicates()
-            .sink { [weak self] _ in
-                self?.resizePanelForModel()
-            }
-            .store(in: &cancellables)
-
-        positionPanel()
-        panel.orderFrontRegardless()
+        surfaceCoordinator = FloatingSurfaceCoordinator(model: model)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

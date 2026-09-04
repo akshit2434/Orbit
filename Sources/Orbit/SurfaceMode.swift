@@ -27,6 +27,86 @@ enum ExpansionSide: Equatable {
     case below
 }
 
+struct OrbAnchor: Equatable, Sendable {
+    var center: CGPoint
+}
+
+struct SurfacePlacement: Equatable {
+    var frame: NSRect
+    var side: ExpansionSide
+}
+
+private func candidateSurfaceFrame(
+    size: NSSize, orbFrame: NSRect, side: ExpansionSide, gap: CGFloat
+) -> NSRect {
+    switch side {
+    case .left:
+        NSRect(x: orbFrame.minX - gap - size.width,
+               y: orbFrame.midY - size.height / 2, width: size.width, height: size.height)
+    case .right:
+        NSRect(x: orbFrame.maxX + gap,
+               y: orbFrame.midY - size.height / 2, width: size.width, height: size.height)
+    case .above:
+        NSRect(x: orbFrame.midX - size.width / 2,
+               y: orbFrame.maxY + gap, width: size.width, height: size.height)
+    case .below:
+        NSRect(x: orbFrame.midX - size.width / 2,
+               y: orbFrame.minY - gap - size.height, width: size.width, height: size.height)
+    }
+}
+
+private func frameOverflow(_ frame: NSRect, screen: CGRect, margin: CGFloat) -> CGFloat {
+    max(0, screen.minX + margin - frame.minX)
+        + max(0, frame.maxX - (screen.maxX - margin))
+        + max(0, screen.minY + margin - frame.minY)
+        + max(0, frame.maxY - (screen.maxY - margin))
+}
+
+/// Places an attached surface without ever changing the orb anchor. It first
+/// honors the preferred side, then its opposite, then chooses the perpendicular
+/// side with the least overflow before applying the final containment invariant.
+func attachedSurfacePlacement(
+    mode: SurfaceMode,
+    anchor: OrbAnchor,
+    preferredSide: ExpansionSide,
+    screen: CGRect,
+    gap: CGFloat = 6,
+    margin: CGFloat = 12
+) -> SurfacePlacement {
+    let orbSize = surfaceSize(.orb)
+    let orbFrame = NSRect(
+        x: anchor.center.x - orbSize.width / 2,
+        y: anchor.center.y - orbSize.height / 2,
+        width: orbSize.width,
+        height: orbSize.height)
+    let opposite: ExpansionSide = switch preferredSide {
+    case .left: .right
+    case .right: .left
+    case .above: .below
+    case .below: .above
+    }
+    let perpendicular: [ExpansionSide] = switch preferredSide {
+    case .left, .right: [.above, .below]
+    case .above, .below: [.left, .right]
+    }
+    let order = [preferredSide, opposite] + perpendicular.sorted {
+        frameOverflow(candidateSurfaceFrame(size: surfaceSize(mode), orbFrame: orbFrame, side: $0, gap: gap), screen: screen, margin: margin)
+            < frameOverflow(candidateSurfaceFrame(size: surfaceSize(mode), orbFrame: orbFrame, side: $1, gap: gap), screen: screen, margin: margin)
+    }
+    let size = surfaceSize(mode)
+    let selected = order.min { lhs, rhs in
+        let leftOverflow = frameOverflow(candidateSurfaceFrame(size: size, orbFrame: orbFrame, side: lhs, gap: gap), screen: screen, margin: margin)
+        let rightOverflow = frameOverflow(candidateSurfaceFrame(size: size, orbFrame: orbFrame, side: rhs, gap: gap), screen: screen, margin: margin)
+        if leftOverflow == rightOverflow {
+            return order.firstIndex(of: lhs)! < order.firstIndex(of: rhs)!
+        }
+        return leftOverflow < rightOverflow
+    } ?? preferredSide
+    let candidate = candidateSurfaceFrame(size: size, orbFrame: orbFrame, side: selected, gap: gap)
+    return SurfacePlacement(
+        frame: containedPanelFrame(candidate, screen: screen, margin: margin), side: selected)
+}
+
 func expansionSide(anchorX: Double, anchorY: Double, screen: CGRect) -> ExpansionSide {
     let toLeftEdge = anchorX - screen.minX
     let toRightEdge = screen.maxX - anchorX

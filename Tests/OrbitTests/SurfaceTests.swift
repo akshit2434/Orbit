@@ -225,6 +225,44 @@ final class SurfaceTests: XCTestCase {
             }
         }
     }
+    func testAttachedSurfacePlacementNeverMovesAnchorOrOverflows() {
+        let screens = [
+            CGRect(x: 0, y: 25, width: 1512, height: 957),
+            CGRect(x: -1440, y: -200, width: 1440, height: 900),
+            CGRect(x: 0, y: 0, width: 300, height: 360),
+        ]
+        for screen in screens {
+            let anchors = [
+                CGPoint(x: screen.minX + 40, y: screen.minY + 46),
+                CGPoint(x: screen.maxX - 40, y: screen.minY + 46),
+                CGPoint(x: screen.minX + 40, y: screen.maxY - 46),
+                CGPoint(x: screen.maxX - 40, y: screen.maxY - 46),
+            ]
+            for point in anchors {
+                let anchor = OrbAnchor(center: point)
+                for mode: SurfaceMode in [.voice, .thinking, .output, .card, .history] {
+                    for side: ExpansionSide in [.left, .right, .above, .below] {
+                        let placement = attachedSurfacePlacement(
+                            mode: mode, anchor: anchor, preferredSide: side, screen: screen)
+                        XCTAssertEqual(anchor.center, point)
+                        XCTAssertGreaterThanOrEqual(placement.frame.minX, screen.minX + 12 - 0.5)
+                        XCTAssertGreaterThanOrEqual(placement.frame.minY, screen.minY + 12 - 0.5)
+                        XCTAssertLessThanOrEqual(placement.frame.maxX, screen.maxX - 12 + 0.5)
+                        XCTAssertLessThanOrEqual(placement.frame.maxY, screen.maxY - 12 + 0.5)
+                    }
+                }
+            }
+        }
+    }
+
+    func testAttachedSurfaceFallsBackToAvailableSide() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let anchor = OrbAnchor(center: CGPoint(x: 52, y: 400))
+        let placement = attachedSurfacePlacement(
+            mode: .card, anchor: anchor, preferredSide: .left, screen: screen)
+        XCTAssertEqual(placement.side, .right)
+        XCTAssertGreaterThan(placement.frame.minX, anchor.center.x)
+    }
     @MainActor
     func testEndDragProjectsVelocityBeforeSnap() {
         let svc = ContextService()
