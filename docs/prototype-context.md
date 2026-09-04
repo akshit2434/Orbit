@@ -28,7 +28,7 @@ OrbitApp
       └─ OrbitPanelModel
           ├─ SurfaceMode (orb / voice / thinking / output / card / history) + OrbitState
           ├─ mockText / askText / streamText / hintText / workStart / isMockVoice (+ computed isExpanded / chatOpen)
-          ├─ selectedTurn + ChatStore (cap 50)
+          ├─ selectedTurn + ChatStore (selectable in-memory threads, cap 50 turns each)
           ├─ MicrophoneMonitor
           ├─ ContextService (active-app, pastedText, clipboard-gated, screenshot note)
           ├─ TalkSession (TalkController.selectTools → ContextService.collect → token stream via OpenRouterTokenStreamer, history-aware messages)
@@ -77,7 +77,8 @@ Thinking and output bubbles sit 4 pt from the orb. Non-orb dialogue surfaces are
 - `TalkController.selectTools(transcript:hasPaste:clipboardAllowed:)` is the only place that decides which `ContextTool`s fire: screen words → `.screenshot` + `.activeAppWindow`; non-empty paste → `.pastedText`; explicit opt-in → `.clipboard`. Nothing else can pull context.
 - `ContextService.collect(tools:)` enforces the gates: clipboard reads only when `clipboardAllowed`, screenshot capture only appends a `screenshot-requested` note (async `captureScreenshot()` fills `screenshotPNG` separately), empty tools yield an empty bundle.
 - Streaming runs through `TokenStreamer` (`OpenRouterTokenStreamer` live SSE via `StreamParse.tokenDeltas`, `StubTokenStreamer` in tests). `TalkController.messages(transcript:context:history:)` builds the prompt from the collected bundle plus the trailing history turns; `hintStrings(for:)` is the single source of the progress line.
-- `ChatStore` (behind the `ChatStoring` persistence seam) keeps the newest 50 turns in `turns` order; `submit` appends `ChatTurn(transcript:reply:tools:)` after the token tasks flush, guarded so cancelled/closed streams never record. `openHistory()` enters history mode with no stale timer; `closeChat()` returns to the orb; reread selection is read-only.
+- `ChatStore` (behind the `ChatStoring` persistence seam) owns selectable in-memory `ChatThread`s and keeps the newest 50 turns per thread. The selected thread receives orb and card prompts until the user creates or selects another thread. `submit` captures that thread ID, passes its chronological recent history into `TalkSession`, and appends completion back to the originating thread. `openHistory()` enters history mode with no stale timer; `closeChat()` only collapses and intentionally leaves active work running; explicit cancel still cancels.
+- All panel frame writes pass through `containedPanelFrame`, including launch restoration, mode resize, live drag, release projection, edge snap, and delayed reassert. Tests cover every surface mode at all four off-screen corner requests on a non-zero-origin display.
 - `OpenRouterClient.complete(transcript:context:)` builds the prompt only from the collected bundle (front-app name, pasted text, clipboard, screenshot flag) and falls back to the stub reply when no key is configured. API keys never appear in logs, replies, or diffs.
 - Long-running work should have task IDs, parent/child relationships, cancellation, and observable progress from the beginning. (Today: the answer `Task` is cancellable on Escape/activate; deeper task tracking is still owed.)
 

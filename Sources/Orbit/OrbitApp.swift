@@ -172,16 +172,28 @@ final class OrbitPanelModel: ObservableObject {
     }
 
     func closeChat() {
-        answerTask?.cancel()
-        answerTask = nil
+        mode = .orb
+        selectedTurn = nil
+    }
+
+    func newThread() {
+        store.newThread()
         streamText = ""
+        currentTranscript = ""
         hintText = nil
         workStart = nil
         completedWorkDuration = nil
-        currentTranscript = ""
-        mode = .orb
         selectedTurn = nil
-        state = .idle
+        mode = .card
+    }
+
+    func selectThread(_ id: UUID) {
+        store.selectThread(id)
+        streamText = store.turns.first?.reply ?? ""
+        currentTranscript = store.turns.first?.transcript ?? ""
+        completedWorkDuration = nil
+        selectedTurn = nil
+        mode = .card
     }
 
     func expandToCard() {
@@ -198,10 +210,10 @@ final class OrbitPanelModel: ObservableObject {
             mode = .voice
             return
         }
-        submit(transcript: pending)
+        submit(transcript: pending, keepCard: isChatMode)
     }
 
-    func submit(transcript: String) {
+    func submit(transcript: String, keepCard: Bool = false) {
         let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
@@ -214,7 +226,7 @@ final class OrbitPanelModel: ObservableObject {
         completedWorkDuration = nil
         currentTranscript = text
         state = .thinking
-        mode = .thinking
+        mode = keepCard ? .card : .thinking
         selectedTurn = nil
         askText = ""
         mockText = ""
@@ -225,10 +237,13 @@ final class OrbitPanelModel: ObservableObject {
             var value: String { lock.withLock { chunks.joined() } }
         }
         let accumulator = Accumulator()
+        let threadID = store.selectedThreadID
+        let history = Array(store.turns.reversed())
         answerTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.talk.answerStream(
                 transcript: text,
+                history: history,
                 onHint: { hint in
                     Task { @MainActor [weak self] in
                         guard let self else { return }
@@ -259,16 +274,19 @@ final class OrbitPanelModel: ObservableObject {
                 self.workStart = Date()
             }
             self.hintText = nil
-            self.completedWorkDuration = self.workStart.map { Date().timeIntervalSince($0) } ?? 0
+            self.completedWorkDuration = max(
+                1, self.workStart.map { Date().timeIntervalSince($0) } ?? 1)
             let fired = TalkController.selectTools(
                 transcript: text,
                 hasPaste: !self.context.pastedText.isEmpty,
                 clipboardAllowed: self.context.clipboardAllowed
             )
             let tools = fired.map(\.rawValue).sorted()
-            self.store.append(ChatTurn(transcript: text, reply: reply, tools: tools))
+            self.store.append(ChatTurn(transcript: text, reply: reply, tools: tools), to: threadID)
             self.answerTask = nil
-            self.mode = .output
+            if self.mode != .orb {
+                self.mode = keepCard ? .card : .output
+            }
             self.state = .idle
         }
     }
@@ -366,7 +384,8 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             origin = .zero
         }
 
-        panel.setFrame(NSRect(origin: origin, size: size), display: false)
+        let screenFrame = preferredScreen()?.visibleFrame ?? NSRect(origin: origin, size: size)
+        panel.setFrame(containedPanelFrame(NSRect(origin: origin, size: size), screen: screenFrame), display: false)
         persistPanelAnchor()
     }
 
@@ -387,10 +406,12 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             anchorX: panel.frame.maxX, anchorY: panel.frame.midY, screen: screenFrame)
         model.side = side
         let origin = resizeOrigin(current: panel.frame, newSize: size, side: side, screen: screenFrame)
-        let frame = NSRect(origin: origin, size: size)
+        let frame = containedPanelFrame(
+            NSRect(origin: origin, size: size), screen: screenFrame)
 
         if mode != .orb {
             panel.setFrame(frame, display: true)
+            refreshPanelLayout(panel, expectedFrame: frame)
             panel.makeKeyAndOrderFront(nil)
             return
         }
@@ -400,6 +421,19 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         }
         pendingCollapse = collapse
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.10, execute: collapse)
+    }
+
+    private func refreshPanelLayout(_ panel: NSPanel, expectedFrame: NSRect) {
+        panel.contentView?.needsLayout = true
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.displayIfNeeded()
+        DispatchQueue.main.async { [weak panel] in
+            guard let panel else { return }
+            panel.setFrame(expectedFrame, display: true)
+            panel.contentView?.needsLayout = true
+            panel.contentView?.layoutSubtreeIfNeeded()
+            panel.displayIfNeeded()
+        }
     }
 
     private func preferredScreen() -> NSScreen? {
@@ -475,7 +509,7 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
             ?? panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
         var frame = panel.frame
         frame.origin = NSPoint(x: cursor.x - offset.x, y: cursor.y - offset.y)
-        panel.setFrame(clampedDragFrame(frame, screen: screenFrame), display: true)
+        panel.setFrame(containedPanelFrame(frame, screen: screenFrame, margin: 2), display: true)
     }
 
     private func snapPanelToEdge() {
@@ -484,7 +518,8 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         let screenFrame =
             panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame ?? panel.frame
         let target = snapTarget(current: panel.frame, screen: screenFrame)
-        let targetFrame = NSRect(origin: target, size: panel.frame.size)
+        let targetFrame = containedPanelFrame(
+            NSRect(origin: target, size: panel.frame.size), screen: screenFrame)
         // A single continuous release trajectory. The throw projection has
         // already moved the target selection; this animation supplies the
         // magnetic settle without handing the window to macOS window dragging.
@@ -508,7 +543,9 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
         let target = snapTarget(current: panel.frame, screen: screenFrame)
         let drift = hypot(target.x - panel.frame.origin.x, target.y - panel.frame.origin.y)
         guard drift > 2 else { return }
-        panel.setFrame(NSRect(origin: target, size: panel.frame.size), display: true)
+        panel.setFrame(
+            containedPanelFrame(NSRect(origin: target, size: panel.frame.size), screen: screenFrame),
+            display: true)
         persistPanelAnchor()
     }
 

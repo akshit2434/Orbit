@@ -107,7 +107,7 @@ final class ChatModelTests: XCTestCase {
         XCTAssertEqual(model.store.turns.first?.transcript, "what am I looking at?")
         XCTAssertTrue(model.store.turns.first?.tools.contains("screenshot") ?? false)
     }
-    func testCloseChatCancelsInflightStream() async {
+    func testCloseChatCollapsesWithoutCancellingInflightStream() async {
         let svc = ContextService()
         let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))
         let model = OrbitPanelModel(isMockVoice: true, context: svc,
@@ -116,7 +116,30 @@ final class ChatModelTests: XCTestCase {
         model.closeChat()
         try? await Task.sleep(nanoseconds: 500_000_000)
         XCTAssertFalse(model.chatOpen)
-        XCTAssertTrue(model.streamText.isEmpty)
+        XCTAssertTrue(model.streamText.contains("ping"))
+        XCTAssertEqual(model.store.turns.first?.transcript, "ping")
+    }
+    func testCardSendStaysInCardAndUsesSelectedThread() async {
+        let svc = ContextService()
+        let client = OpenRouterClient(config: OrbitConfig(assemblyAIKey: nil, openRouterKey: nil, openRouterModel: "m"))
+        let model = OrbitPanelModel(isMockVoice: true, context: svc,
+            talk: TalkSession(context: svc, client: client), voice: MockVoiceSession())
+        let first = model.store.selectedThreadID
+        model.mode = .card
+        model.askText = "first message"
+        model.send()
+        XCTAssertEqual(model.mode, .card)
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(model.mode, .card)
+        XCTAssertEqual(model.store.turns.first?.transcript, "first message")
+        let second = model.store.newThread()
+        model.askText = "second message"
+        model.send()
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(model.store.selectedThreadID, second)
+        XCTAssertEqual(model.store.turns.first?.transcript, "second message")
+        model.store.selectThread(first)
+        XCTAssertEqual(model.store.turns.first?.transcript, "first message")
     }
     func testOpenHistoryShowsNoStaleTimer() {
         let svc = ContextService()

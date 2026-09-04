@@ -206,6 +206,25 @@ final class SurfaceTests: XCTestCase {
         XCTAssertEqual(over.maxX, 998, accuracy: 0.01)
         XCTAssertEqual(over.maxY, 798, accuracy: 0.01)
     }
+    func testEveryModeIsContainedAtEveryCorner() {
+        let screen = CGRect(x: -1440, y: 25, width: 1440, height: 875)
+        let requestedOrigins = [
+            CGPoint(x: screen.minX - 500, y: screen.minY - 500),
+            CGPoint(x: screen.maxX + 500, y: screen.minY - 500),
+            CGPoint(x: screen.minX - 500, y: screen.maxY + 500),
+            CGPoint(x: screen.maxX + 500, y: screen.maxY + 500),
+        ]
+        for mode: SurfaceMode in [.orb, .voice, .thinking, .output, .card, .history] {
+            for origin in requestedOrigins {
+                let frame = containedPanelFrame(
+                    NSRect(origin: origin, size: surfaceSize(mode)), screen: screen)
+                XCTAssertGreaterThanOrEqual(frame.minX, screen.minX + 12 - 0.5)
+                XCTAssertGreaterThanOrEqual(frame.minY, screen.minY + 12 - 0.5)
+                XCTAssertLessThanOrEqual(frame.maxX, screen.maxX - 12 + 0.5)
+                XCTAssertLessThanOrEqual(frame.maxY, screen.maxY - 12 + 0.5)
+            }
+        }
+    }
     @MainActor
     func testEndDragProjectsVelocityBeforeSnap() {
         let svc = ContextService()

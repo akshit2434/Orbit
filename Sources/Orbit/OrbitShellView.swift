@@ -47,6 +47,7 @@ enum OrbitState: Equatable {
 struct OrbitOverlayView: View {
     @ObservedObject var model: OrbitPanelModel
     @State private var isHovered = false
+    @State private var historyHideTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
@@ -117,7 +118,6 @@ struct OrbitOverlayView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .padding(.trailing, 12)
         .preferredColorScheme(.light)
-        .onHover { isHovered = $0 }
         .animation(.easeInOut(duration: 0.46), value: model.mode)
         .animation(.easeInOut(duration: 0.46), value: model.state)
         .animation(.easeInOut(duration: 0.46), value: model.hintText)
@@ -127,40 +127,23 @@ struct OrbitOverlayView: View {
     }
 
     private var thinkingBubble: some View {
-        ZStack(alignment: .topLeading) {
+        HStack(spacing: 6) {
+            compactCloseButton
             Text(model.hintText ?? "Thinking…")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.white, in: RoundedRectangle(cornerRadius: 10))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(.black.opacity(0.1), lineWidth: 0.6)
-                }
-                .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-                .frame(maxWidth: 170, alignment: .leading)
+                .lineLimit(1)
                 .transition(.blurReplace.combined(with: .opacity))
-            Button {
-                model.closeChat()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
-                    .background(.black, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .focusEffectDisabled()
-            .keyboardShortcut(.cancelAction)
-            .accessibilityLabel("Close chat")
         }
-        .frame(maxWidth: 176, alignment: .trailing)
+        .padding(6)
+        .background(.white, in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).stroke(.black.opacity(0.1), lineWidth: 0.6) }
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
     }
 
     private var outputBubble: some View {
-        ZStack(alignment: .topLeading) {
+        HStack(spacing: 6) {
+            compactCloseButton
             Button {
                 model.expandToCard()
             } label: {
@@ -169,14 +152,6 @@ struct OrbitOverlayView: View {
                     .lineLimit(3)
                     .truncationMode(.tail)
                     .foregroundStyle(.primary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 7))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7)
-                            .stroke(.black.opacity(0.1), lineWidth: 0.6)
-                    }
-                    .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
                     .frame(maxWidth: 170, alignment: .trailing)
             }
             .buttonStyle(.plain)
@@ -184,22 +159,26 @@ struct OrbitOverlayView: View {
             .focusEffectDisabled()
             .accessibilityLabel("Expand to card")
             .transition(.blurReplace.combined(with: .opacity))
-            Button {
-                model.closeChat()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
-                    .background(.black, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .focusEffectDisabled()
-            .keyboardShortcut(.cancelAction)
-            .accessibilityLabel("Close chat")
         }
-        .frame(maxWidth: 176, alignment: .trailing)
+        .padding(6)
+        .background(.white, in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).stroke(.black.opacity(0.1), lineWidth: 0.6) }
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+    }
+
+    private var compactCloseButton: some View {
+        Button { model.closeChat() } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 20, height: 20)
+                .background(.black, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .focusEffectDisabled()
+        .keyboardShortcut(.cancelAction)
+        .accessibilityLabel("Collapse")
     }
 
     private var cardView: some View {
@@ -211,6 +190,23 @@ struct OrbitOverlayView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                Menu {
+                    ForEach(model.store.threads) { thread in
+                        Button(thread.title) { model.selectThread(thread.id) }
+                    }
+                } label: {
+                    Image(systemName: "text.bubble")
+                        .frame(width: 22, height: 22)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .accessibilityLabel("Select thread")
+                Button { model.newThread() } label: {
+                    Image(systemName: "square.and.pencil")
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("New thread")
                 Button {
                     model.closeChat()
                 } label: {
@@ -226,6 +222,8 @@ struct OrbitOverlayView: View {
                 .keyboardShortcut(.cancelAction)
                 .accessibilityLabel("Close chat")
             }
+            .contentShape(Rectangle())
+            .simultaneousGesture(panelDragGesture)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if let selected = model.selectedTurn {
@@ -238,7 +236,7 @@ struct OrbitOverlayView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
                         dialogueTurn(selected, fullReply: true)
-                    } else if model.store.turns.isEmpty {
+                    } else if model.store.turns.isEmpty, !model.currentTranscript.isEmpty {
                         dialogueStrings(
                             transcript: model.currentTranscript,
                             reply: model.streamText.isEmpty
@@ -248,6 +246,12 @@ struct OrbitOverlayView: View {
                             dialogueTurn(turn, fullReply: true)
                                 .contentShape(Rectangle())
                                 .onTapGesture { model.selectedTurn = turn }
+                        }
+                        if model.state == .thinking, !model.currentTranscript.isEmpty {
+                            dialogueStrings(
+                                transcript: model.currentTranscript,
+                                reply: model.streamText.isEmpty
+                                    ? (model.hintText ?? "Thinking…") : model.streamText)
                         }
                     }
                 }
@@ -319,7 +323,7 @@ struct OrbitOverlayView: View {
                     Text(workedString(elapsed: context.date.timeIntervalSince(start)))
                 }
             } else {
-                Text(workedString(elapsed: 0))
+                EmptyView()
             }
         }
     }
@@ -342,22 +346,27 @@ struct OrbitOverlayView: View {
         .focusable(false)
         .focusEffectDisabled()
         .accessibilityLabel("Show history")
+        .onHover { hovering in
+            if hovering {
+                historyHideTask?.cancel()
+                isHovered = true
+            }
+        }
         .opacity(isHovered && !model.isExpanded ? 1 : 0)
         .scaleEffect(isHovered && !model.isExpanded ? 1 : 0.8)
-        .offset(x: isHovered && !model.isExpanded ? -56 : 0)
+        .offset(x: isHovered && !model.isExpanded ? -30 : 0)
         .allowsHitTesting(isHovered && !model.isExpanded)
         .animation(.easeOut(duration: 0.1), value: isHovered)
         .animation(.smooth(duration: 0.22), value: model.isExpanded)
     }
 
     private var cardInputRow: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             TextField("Ask…", text: $model.askText)
                 .textFieldStyle(.plain)
-                .font(.system(size: 10))
-                .padding(.horizontal, 8)
-                .frame(height: 28)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                .font(.system(size: 11))
+                .padding(.leading, 8)
+                .frame(height: 34)
                 .onSubmit {
                     model.send()
                 }
@@ -366,8 +375,8 @@ struct OrbitOverlayView: View {
                 model.activate()
             } label: {
                 Image(systemName: "mic")
-                    .font(.system(size: 10, weight: .bold))
-                    .frame(width: 22, height: 22)
+                    .font(.system(size: 11, weight: .medium))
+                    .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
@@ -375,7 +384,13 @@ struct OrbitOverlayView: View {
             .focusEffectDisabled()
             .accessibilityLabel("Voice input")
         }
-        .frame(maxWidth: 280, alignment: .trailing)
+        .padding(.horizontal, 3)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(.black.opacity(0.08), lineWidth: 0.6)
+        }
+        .frame(maxWidth: 280)
     }
 
     private var surface: some View {
@@ -410,22 +425,35 @@ struct OrbitOverlayView: View {
                 model.activate()
             }
             .frame(width: 56, height: 56)
+            .onHover { hovering in
+                guard model.mode == .orb else { return }
+                historyHideTask?.cancel()
+                if hovering {
+                    isHovered = true
+                } else {
+                    historyHideTask = Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(500))
+                        guard !Task.isCancelled else { return }
+                        isHovered = false
+                    }
+                }
+            }
             .opacity(model.isExpanded ? 0 : 1)
             .scaleEffect(model.isExpanded ? 0.78 : 1)
             .allowsHitTesting(!model.isExpanded)
         }
         .animation(.smooth(duration: 0.22), value: model.isExpanded)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 2)
-                .onChanged { value in
-                    model.drag(
-                        cursor: NSEvent.mouseLocation,
-                        at: value.time.timeIntervalSinceReferenceDate)
-                }
-                .onEnded { _ in
-                    model.endCursorDrag()
-                }
-        )
+        .simultaneousGesture(panelDragGesture)
+    }
+
+    private var panelDragGesture: some Gesture {
+        DragGesture(minimumDistance: 2)
+            .onChanged { value in
+                model.drag(
+                    cursor: NSEvent.mouseLocation,
+                    at: value.time.timeIntervalSinceReferenceDate)
+            }
+            .onEnded { _ in model.endCursorDrag() }
     }
 
     private var streamingControls: some View {

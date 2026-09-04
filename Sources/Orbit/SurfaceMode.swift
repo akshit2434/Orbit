@@ -255,3 +255,16 @@ func clampedDragFrame(_ frame: NSRect, screen: CGRect) -> NSRect {
     clamped.origin.y = min(max(frame.origin.y, minY), max(minY, maxY))
     return clamped
 }
+
+/// Final AppKit boundary invariant: the complete panel frame stays inside the
+/// visible display regardless of which mode or transition requested it.
+func containedPanelFrame(_ frame: NSRect, screen: CGRect, margin: CGFloat = 12) -> NSRect {
+    var result = frame
+    let usableWidth = max(0, screen.width - margin * 2)
+    let usableHeight = max(0, screen.height - margin * 2)
+    result.size.width = min(result.width, usableWidth)
+    result.size.height = min(result.height, usableHeight)
+    result.origin.x = min(max(result.minX, screen.minX + margin), screen.maxX - result.width - margin)
+    result.origin.y = min(max(result.minY, screen.minY + margin), screen.maxY - result.height - margin)
+    return result
+}

@@ -24,4 +24,16 @@ final class ChatStoreTests: XCTestCase {
         s.clear()
         XCTAssertTrue(s.turns.isEmpty)
     }
+    func testThreadsKeepIndependentHistoriesAndSelection() {
+        let s = ChatStore()
+        let first = s.selectedThreadID
+        s.append(ChatTurn(transcript: "first", reply: "one", tools: []))
+        let second = s.newThread()
+        s.append(ChatTurn(transcript: "second", reply: "two", tools: []))
+        XCTAssertEqual(s.turns.map(\.transcript), ["second"])
+        s.selectThread(first)
+        XCTAssertEqual(s.turns.map(\.transcript), ["first"])
+        s.selectThread(second)
+        XCTAssertEqual(s.threads.first(where: { $0.id == second })?.title, "second")
+    }
 }

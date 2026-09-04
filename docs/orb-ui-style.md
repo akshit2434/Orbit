@@ -75,6 +75,10 @@ One `SurfaceMode` drives view, panel size, and placement. Panel sizes (points):
 - Card layout is header (orb, frozen work duration, close), chronological scrollable chat, then a composer pinned to the bottom. Each assistant response owns its adjacent copy control.
 - Work duration freezes when streaming completes; it never continues counting in a completed output/card.
 - Card close uses a short opacity transition and the native panel collapses after 100 ms, avoiding a tall intermediate exit frame.
+- Closing a thinking/output/card surface collapses it without cancelling the active query. Completion is recorded in its originating thread while the orb stays collapsed.
+- Chat submissions remain in card mode. The selected thread receives every orb and card prompt until the user selects another thread or creates a new one.
+- The card header includes thread selection and new-thread controls. Thread histories are isolated and the selected thread's chronological turns are passed to the model.
+- The composer is one flat neutral bar with borderless text and an integrated voice control; nested fields and detached controls are prohibited.
 - Capsule copy-free rule stands; all words live in the bubble/card.
 
 ## Product behavior
@@ -82,3 +86,4 @@ One `SurfaceMode` drives view, panel size, and placement. Panel sizes (points):
 - The orb is the primary interface and runs in a borderless, always-on-top accessory panel.
 - Opening the full application is never the default response to clicking the orb.
 - The interface should remain responsive with one click and must not treat the orb's hit target as draggable window background.
+- Every native frame mutation passes through `containedPanelFrame`; launch, restore, resize, drag, throw, snap, and reassert keep the complete panel inside the active screen's visible frame.
